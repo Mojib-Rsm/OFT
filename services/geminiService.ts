@@ -5,7 +5,6 @@ import { ContentType, PassportConfig } from "../types";
 // The system will try the first key, if it fails, it will try the second one, and so on.
 const API_KEYS = [
   "AIzaSyBdLjhEyVIxRiEVdeocFgq4rTqt7rX3zTM",
-  "AIzaSyBdLjhEyVIxRiEVdeocFgq4rTqt7rX3zTM",
   process.env.API_KEY
 ].filter((key): key is string => !!key && key.length > 0);
 
