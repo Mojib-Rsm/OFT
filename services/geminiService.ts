@@ -120,12 +120,15 @@ export const generateImage = async (
   // Logic for different image tools based on whether input image is present or just generation
   if (inputImageBase64) {
     // EDITING MODE (Passport, BG Remove)
-    const base64Data = inputImageBase64.split(',')[1];
+    // Extract correct mime type
+    const mimeTypeMatch = inputImageBase64.match(/^data:(.*?);base64,/);
+    const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/png';
+    const base64Data = inputImageBase64.replace(/^data:(.*?);base64,/, '');
     
     parts.push({
       inlineData: {
         data: base64Data,
-        mimeType: 'image/png' // Assuming PNG for simplicity/compatibility
+        mimeType: mimeType
       }
     });
 
@@ -198,20 +201,35 @@ export const generateImage = async (
     });
 
     const generatedImages: string[] = [];
+    let textOutput = "";
 
-    // Parse response for image parts
-    if (response.candidates && response.candidates[0].content && response.candidates[0].content.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          const base64EncodeString = part.inlineData.data;
-          const imageUrl = `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
-          generatedImages.push(imageUrl);
+    // Parse response for image parts or rejection text
+    if (response.candidates && response.candidates[0]) {
+      // Check for safety block
+      if (response.candidates[0].finishReason === 'SAFETY') {
+        throw new Error("Generation blocked by safety settings. Please try a different image or prompt.");
+      }
+
+      if (response.candidates[0].content && response.candidates[0].content.parts) {
+        for (const part of response.candidates[0].content.parts) {
+          if (part.inlineData) {
+            const base64EncodeString = part.inlineData.data;
+            const imageUrl = `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
+            generatedImages.push(imageUrl);
+          } else if (part.text) {
+            textOutput += part.text;
+          }
         }
       }
     }
 
     if (generatedImages.length === 0) {
-      throw new Error("No image generated.");
+      if (textOutput) {
+        console.warn("Model returned text instead of image:", textOutput);
+        // Clean up the text for display
+        throw new Error(`AI Response: ${textOutput.substring(0, 250)}${textOutput.length > 250 ? '...' : ''}`);
+      }
+      throw new Error("No image generated. The model might have blocked the request.");
     }
 
     return generatedImages;
