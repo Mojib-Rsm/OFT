@@ -1,0 +1,5 @@
+{
+  "name": "OFT AI",
+  "description": "A smart AI-powered generator for Bengali Facebook posts, captions, and comments using Google Gemini.",
+  "requestFramePermissions": []
+}
