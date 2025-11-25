@@ -4,8 +4,8 @@ import { ContentType, PassportConfig } from "../types";
 // API Keys with failover priority
 // The system will try the first key, if it fails, it will try the second one, and so on.
 const API_KEYS = [
-  "AIzaSyD5ikt2QSwzXvtLEoHbeNkdo-r8Yrr0Dbk",
-  "AIzaSyD5ikt2QSwzXvtLEoHbeNkdo-r8Yrr0Dbk",
+  "AIzaSyBdLjhEyVIxRiEVdeocFgq4rTqt7rX3zTM",
+  "AIzaSyBdLjhEyVIxRiEVdeocFgq4rTqt7rX3zTM",
   process.env.API_KEY
 ].filter((key): key is string => !!key && key.length > 0);
 
