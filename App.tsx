@@ -43,7 +43,8 @@ const App: React.FC = () => {
     aspectRatio?: string,
     inputImage?: string,
     passportConfig?: any,
-    overlayText?: string
+    overlayText?: string,
+    userInstruction?: string
   ) => {
     setIsLoading(true);
     setError(null);
@@ -57,7 +58,8 @@ const App: React.FC = () => {
       if ([ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type)) {
         generatedOptions = await generateImage(category, context, aspectRatio, inputImage, passportConfig, overlayText);
       } else {
-        generatedOptions = await generateBanglaContent(type, category, context, tone, length, party);
+        // Pass inputImage for multimodal text generation (e.g. Screenshot Comments)
+        generatedOptions = await generateBanglaContent(type, category, context, tone, length, party, userInstruction, inputImage);
       }
       
       setResults(generatedOptions);
@@ -80,7 +82,8 @@ const App: React.FC = () => {
         results: historyResults,
         hasInputImage: !!inputImage,
         passportConfig,
-        overlayText
+        overlayText,
+        userInstruction
       };
       
       setHistory(prev => [newItem, ...prev]);

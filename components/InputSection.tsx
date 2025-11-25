@@ -7,6 +7,9 @@ import {
   StoryCategory, 
   NoteCategory, 
   ScriptCategory, 
+  EmailCategory,
+  AdCopyCategory,
+  PoemCategory,
   ImageCategory, 
   ThumbnailCategory, 
   LogoCategory, 
@@ -45,13 +48,17 @@ import {
   Palette,
   Shirt,
   Globe,
-  Type
+  Type,
+  PenLine,
+  Mail,
+  Megaphone,
+  Feather
 } from 'lucide-react';
 
 interface InputSectionProps {
   initialTab?: ContentType;
   onBack?: () => void;
-  onGenerate: (type: ContentType, category: string, context: string, tone?: string, length?: string, party?: string, aspectRatio?: string, inputImage?: string, passportConfig?: any, overlayText?: string) => void;
+  onGenerate: (type: ContentType, category: string, context: string, tone?: string, length?: string, party?: string, aspectRatio?: string, inputImage?: string, passportConfig?: any, overlayText?: string, userInstruction?: string) => void;
   isLoading: boolean;
 }
 
@@ -85,6 +92,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [storyCategory, setStoryCategory] = useState<string>(StoryCategory.DAILY);
   const [noteCategory, setNoteCategory] = useState<string>(NoteCategory.RANDOM);
   const [scriptCategory, setScriptCategory] = useState<string>(ScriptCategory.REELS);
+  const [emailCategory, setEmailCategory] = useState<string>(EmailCategory.LEAVE);
+  const [adCopyCategory, setAdCopyCategory] = useState<string>(AdCopyCategory.FB_AD);
+  const [poemCategory, setPoemCategory] = useState<string>(PoemCategory.ROMANTIC);
   const [imageCategory, setImageCategory] = useState<string>(ImageCategory.REALISTIC);
   const [thumbnailCategory, setThumbnailCategory] = useState<string>(ThumbnailCategory.YOUTUBE);
   const [logoCategory, setLogoCategory] = useState<string>(LogoCategory.MINIMALIST);
@@ -99,6 +109,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
 
   const [context, setContext] = useState<string>('');
   const [overlayText, setOverlayText] = useState<string>('');
+  const [userInstruction, setUserInstruction] = useState<string>(''); // New field for comment instructions
   
   const [tone, setTone] = useState<string>(ContentTone.CASUAL);
   const [length, setLength] = useState<string>(ContentLength.MEDIUM);
@@ -117,6 +128,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.STORY: return storyCategory;
       case ContentType.NOTE: return noteCategory;
       case ContentType.SCRIPT: return scriptCategory;
+      case ContentType.EMAIL: return emailCategory;
+      case ContentType.AD_COPY: return adCopyCategory;
+      case ContentType.POEM: return poemCategory;
       case ContentType.IMAGE: return imageCategory;
       case ContentType.THUMBNAIL: return thumbnailCategory;
       case ContentType.LOGO: return logoCategory;
@@ -135,8 +149,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     return [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type);
   };
   
+  // Updated logic to support image upload for Comments (Screenshots)
   const supportsImageUpload = (type: ContentType) => {
-    return isImageTool(type);
+    return isImageTool(type) || type === ContentType.COMMENT;
   };
 
   const requiresImageUpload = (type: ContentType) => {
@@ -225,7 +240,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       aiRetouch: ppRetouch
     } : undefined;
 
-    onGenerate(activeTab, category, context, tone, length, selectedParty, finalAspectRatio, selectedImage || undefined, passportConfig, overlayText);
+    onGenerate(activeTab, category, context, tone, length, selectedParty, finalAspectRatio, selectedImage || undefined, passportConfig, overlayText, userInstruction);
   };
 
   const renderCategoryOptions = () => {
@@ -242,6 +257,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.STORY: categories = StoryCategory; currentValue = storyCategory; setter = setStoryCategory; break;
       case ContentType.NOTE: categories = NoteCategory; currentValue = noteCategory; setter = setNoteCategory; break;
       case ContentType.SCRIPT: categories = ScriptCategory; currentValue = scriptCategory; setter = setScriptCategory; break;
+      case ContentType.EMAIL: categories = EmailCategory; currentValue = emailCategory; setter = setEmailCategory; break;
+      case ContentType.AD_COPY: categories = AdCopyCategory; currentValue = adCopyCategory; setter = setAdCopyCategory; break;
+      case ContentType.POEM: categories = PoemCategory; currentValue = poemCategory; setter = setPoemCategory; break;
       case ContentType.IMAGE: categories = ImageCategory; currentValue = imageCategory; setter = setImageCategory; break;
       case ContentType.THUMBNAIL: categories = ThumbnailCategory; currentValue = thumbnailCategory; setter = setThumbnailCategory; break;
       case ContentType.LOGO: categories = LogoCategory; currentValue = logoCategory; setter = setLogoCategory; break;
@@ -265,11 +283,14 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const getPlaceholder = () => {
     switch (activeTab) {
       case ContentType.POST: return "উদাহরণ: বৃষ্টির দিন, বন্ধুদের সাথে আড্ডা, বর্তমান পরিস্থিতি...";
-      case ContentType.COMMENT: return "উদাহরণ: রাজনৈতিক দলের পক্ষে/বিপক্ষে মতামত, ফানি ভিডিও, প্রশংসা...";
+      case ContentType.COMMENT: return "পোস্টের বিষয় লিখুন (স্ক্রিনশট আপলোড করলে এটি খালি রাখতে পারেন)...";
       case ContentType.BIO: return "উদাহরণ: নাম আকাশ, ছাত্র, ফটোগ্রাফি, বা সমাজসেবা...";
       case ContentType.STORY: return "উদাহরণ: ট্রাফিক জ্যাম, ব্রেকিং নিউজ, শুভ সকাল...";
       case ContentType.NOTE: return "উদাহরণ: আজ খুব বৃষ্টি, বোরিং ক্লাস, নতুন গান...";
       case ContentType.SCRIPT: return "উদাহরণ: আইফোন রিভিউ, রান্নার টিপস, ভ্লগ ইন্ট্রো...";
+      case ContentType.EMAIL: return "উদাহরণ: ৩ দিনের ছুটির আবেদন, চাকরির জন্য কভার লেটার...";
+      case ContentType.AD_COPY: return "উদাহরণ: নতুন টি-শার্ট কালেকশন, ডিজিটাল মার্কেটিং কোর্স...";
+      case ContentType.POEM: return "উদাহরণ: বর্ষাকাল নিয়ে কবিতা, ভালোবাসার ছন্দ...";
       case ContentType.IMAGE: return "উদাহরণ: একটি বিড়াল সানগ্লাস পড়ে বাইক চালাচ্ছে...";
       case ContentType.THUMBNAIL: return "উদাহরণ: 'How to make money online' বা 'গেমিং লাইভস্ট্রিম'...";
       case ContentType.LOGO: return "উদাহরণ: একটি কফি শপের লোগো, বা টেক স্টার্টআপের লোগো...";
@@ -280,12 +301,19 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     }
   };
 
+  const getImageUploadLabel = () => {
+    if (requiresImageUpload(activeTab)) return "আপনার ছবি আপলোড করুন";
+    if (activeTab === ContentType.COMMENT) return "স্ক্রিনশট আপলোড করুন (অপশনাল)";
+    return "রেফারেন্স ছবি আপলোড করুন (অপশনাল)";
+  };
+
   const TabButton = ({ type, icon: Icon, label }: { type: ContentType, icon: any, label: string }) => (
     <button
       type="button"
       onClick={() => {
         setActiveTab(type);
         setOverlayText('');
+        setUserInstruction('');
         if (!supportsImageUpload(type)) clearImage();
       }}
       className={`relative group flex flex-row items-center justify-center px-4 py-2.5 rounded-xl transition-all duration-200 font-semibold text-sm font-bangla whitespace-nowrap flex-shrink-0 ${
@@ -324,11 +352,14 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           <TabButton type={ContentType.POST} icon={FileText} label="পোস্ট" />
           <TabButton type={ContentType.STORY} icon={Zap} label="স্টোরি" />
           <TabButton type={ContentType.BIO} icon={User} label="বায়ো" />
+          <TabButton type={ContentType.POEM} icon={Feather} label="কবিতা" />
           
           <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
           
           <TabButton type={ContentType.NOTE} icon={StickyNote} label="নোট" />
           <TabButton type={ContentType.SCRIPT} icon={Video} label="স্ক্রিপ্ট" />
+          <TabButton type={ContentType.EMAIL} icon={Mail} label="ইমেইল" />
+          <TabButton type={ContentType.AD_COPY} icon={Megaphone} label="অ্যাড" />
           
           <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
           
@@ -460,7 +491,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1 flex items-center gap-1">
               <Upload size={12} />
-              {requiresImageUpload(activeTab) ? "আপনার ছবি আপলোড করুন" : "রেফারেন্স ছবি আপলোড করুন (অপশনাল)"}
+              {getImageUploadLabel()}
             </label>
             
             {!selectedImage ? (
@@ -514,7 +545,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
             {activeTab === ContentType.BIO ? "আপনার সম্পর্কে / কিওয়ার্ডস" 
              : isImageTool(activeTab) ? "অতিরিক্ত নির্দেশনা (অপশনাল)" 
-             : "বিষয় / প্রসঙ্গ (অপশনাল)"}
+             : "বিষয় / প্রসঙ্গ (যেমন: পোস্টটি কিসের?)"}
           </label>
           <textarea
             value={context}
@@ -523,6 +554,26 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
             className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 block p-4 min-h-[80px] resize-none transition-all placeholder:text-slate-400 font-bangla hover:bg-white"
           />
         </div>
+
+        {/* Extra Comment Instruction Input */}
+        {activeTab === ContentType.COMMENT && (
+          <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+            <label className="text-xs font-bold text-indigo-600 uppercase tracking-wider font-bangla ml-1 flex items-center gap-1">
+              <PenLine size={12} />
+              আপনার মন্তব্য / নির্দিষ্ট পয়েন্ট (অপশনাল)
+            </label>
+            <input
+              type="text"
+              value={userInstruction}
+              onChange={(e) => setUserInstruction(e.target.value)}
+              placeholder="উদাহরণ: খাবারের প্রশংসা করো, অথবা দাম বেশি উল্লেখ করো..."
+              className="w-full bg-indigo-50/50 border border-indigo-200 text-slate-800 text-sm rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 block p-3.5 transition-all placeholder:text-slate-400 font-bangla hover:bg-indigo-50"
+            />
+            <p className="text-[10px] text-slate-400 px-1 font-bangla">
+              * এখানে আপনি যা লিখবেন, কমেন্টটি সেই অনুযায়ী তৈরি হবে।
+            </p>
+          </div>
+        )}
 
         {/* Text Overlay Input (For Image/Thumbnail) */}
         {supportsOverlayText(activeTab) && (

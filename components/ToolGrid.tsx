@@ -15,7 +15,10 @@ import {
   Sparkles,
   PenTool,
   Palette,
-  Briefcase
+  Briefcase,
+  Mail,
+  Megaphone,
+  Feather
 } from 'lucide-react';
 import { ContentType } from '../types';
 
@@ -27,8 +30,8 @@ const ToolGrid: React.FC<ToolGridProps> = ({ onSelectTool }) => {
   const categories = [
     {
       id: 'social',
-      title: 'সোশ্যাল মিডিয়া রাইটিং',
-      subtitle: 'ফেসবুক ও ইনস্টাগ্রামের জন্য কন্টেন্ট',
+      title: 'সোশ্যাল ও ক্রিয়েটিভ',
+      subtitle: 'সোশ্যাল মিডিয়া রাইটিং ও সৃজনশীল লেখা',
       icon: PenTool,
       gradient: 'from-blue-500 to-cyan-400',
       bg: 'bg-blue-50',
@@ -39,6 +42,7 @@ const ToolGrid: React.FC<ToolGridProps> = ({ onSelectTool }) => {
         { type: ContentType.COMMENT, label: 'কমেন্ট জেনারেটর', icon: MessageSquare, desc: 'উপযুক্ত রিপ্লাই ও কমেন্ট' },
         { type: ContentType.STORY, label: 'স্টোরি / স্ট্যাটাস', icon: Zap, desc: 'ছোট ও পাঞ্চি স্ট্যাটাস' },
         { type: ContentType.BIO, label: 'প্রোফাইল বায়ো', icon: User, desc: 'স্টাইলিশ প্রোফাইল বায়ো' },
+        { type: ContentType.POEM, label: 'কবিতা / ছড়া', icon: Feather, desc: 'ছন্দ ও কবিতার লাইন' },
         { type: ContentType.NOTE, label: 'শর্ট নোট (Notes)', icon: StickyNote, desc: '৬০ অক্ষরের নোট' },
       ]
     },
@@ -60,17 +64,19 @@ const ToolGrid: React.FC<ToolGridProps> = ({ onSelectTool }) => {
       ]
     },
     {
-      id: 'video',
-      title: 'ভিডিও ও প্রোডাক্টিভিটি',
-      subtitle: 'স্ক্রিপ্ট এবং অন্যান্য কাজ',
+      id: 'business',
+      title: 'বিজনেজ ও প্রফেশনাল',
+      subtitle: 'ইমেইল, মার্কেটিং ও প্রোডাক্টিভিটি',
       icon: Briefcase,
       gradient: 'from-amber-500 to-orange-500',
       bg: 'bg-amber-50',
       border: 'border-amber-100',
       text: 'text-amber-600',
       tools: [
+        { type: ContentType.EMAIL, label: 'ইমেইল / লেটার', icon: Mail, desc: 'ফরমাল ইমেইল ও আবেদন' },
+        { type: ContentType.AD_COPY, label: 'বিজ্ঞাপন / অ্যাড', icon: Megaphone, desc: 'ফেসবুক অ্যাড ও মার্কেটিং' },
         { type: ContentType.SCRIPT, label: 'ভিডিও স্ক্রিপ্ট', icon: Video, desc: 'রিলস ও ভিডিওর প্ল্যান' },
-        { type: ContentType.OTHER, label: 'অন্যান্য টুলস', icon: MoreHorizontal, desc: 'ইমেইল, উইশ এবং আরও' },
+        { type: ContentType.OTHER, label: 'অন্যান্য টুলস', icon: MoreHorizontal, desc: 'এসএমএস, উইশ এবং অন্যান্য' },
       ]
     }
   ];

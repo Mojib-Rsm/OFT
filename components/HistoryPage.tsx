@@ -1,7 +1,7 @@
 import React from 'react';
 import { HistoryItem } from '../types';
 import ResultCard from './ResultCard';
-import { Trash2, Clock, Calendar, Flag, ChevronRight } from 'lucide-react';
+import { Trash2, Clock, Calendar, Flag, ChevronRight, PenLine } from 'lucide-react';
 
 interface HistoryPageProps {
   history: HistoryItem[];
@@ -78,14 +78,24 @@ const HistoryPage: React.FC<HistoryPageProps> = ({ history, onClearHistory }) =>
                 </div>
               </div>
               
-              {item.context && (
-                <div className="px-6 pt-5 pb-1">
+              <div className="px-6 pt-5 pb-1 space-y-3">
+                {item.context && (
                   <div className="flex gap-2 text-sm text-slate-600 font-bangla bg-slate-50 p-3 rounded-xl border border-slate-100/50">
                     <span className="font-bold text-slate-800 whitespace-nowrap">প্রসঙ্গ:</span> 
                     <p className="line-clamp-2">{item.context}</p>
                   </div>
-                </div>
-              )}
+                )}
+                
+                {item.userInstruction && (
+                   <div className="flex gap-2 text-sm text-indigo-700 font-bangla bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/50">
+                    <span className="font-bold whitespace-nowrap flex items-center gap-1">
+                      <PenLine size={12}/>
+                      আপনার নোট:
+                    </span> 
+                    <p className="line-clamp-2">{item.userInstruction}</p>
+                  </div>
+                )}
+              </div>
 
               <div className="p-6 grid gap-5">
                 {item.results.map((content, idx) => (

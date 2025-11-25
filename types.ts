@@ -5,6 +5,9 @@ export enum ContentType {
   STORY = 'স্টোরি / স্ট্যাটাস',
   NOTE = 'নোট (Note)',
   SCRIPT = 'ভিডিও স্ক্রিপ্ট',
+  EMAIL = 'ইমেইল / লেটার',
+  AD_COPY = 'বিজ্ঞাপন / মার্কেটিং',
+  POEM = 'কবিতা / ছড়া',
   IMAGE = 'এআই ইমেজ',
   THUMBNAIL = 'থাম্বনেইল মেকার',
   LOGO = 'লোগো মেকার',
@@ -72,6 +75,33 @@ export enum ScriptCategory {
   EDUCATIONAL = 'শিক্ষামূলক'
 }
 
+export enum EmailCategory {
+  LEAVE = 'ছুটির আবেদন (Leave)',
+  JOB = 'চাকরির আবেদন (Job)',
+  RESIGNATION = 'Resignation Letter',
+  INVITATION = 'দাওয়াত / আমন্ত্রণ',
+  COMPLAINT = 'অভিযোগ (Complaint)',
+  SPONSORSHIP = 'স্পন্সরশিপ রিকোয়েস্ট',
+  FORMAL = 'অফিশিয়াল ইমেইল'
+}
+
+export enum AdCopyCategory {
+  FB_AD = 'ফেসবুক অ্যাড ক্যাপশন',
+  PRODUCT_DESC = 'প্রোডাক্ট ডেসক্রিপশন',
+  OFFER = 'অফার / সেল পোস্ট',
+  REAL_ESTATE = 'জমি / ফ্ল্যাট বিক্রয়',
+  COURSE = 'কোর্স / কোচিং প্রোমো'
+}
+
+export enum PoemCategory {
+  ROMANTIC = 'ভালোবাসার কবিতা',
+  SAD = 'বিরহের কবিতা',
+  NATURE = 'প্রকৃতি নিয়ে',
+  FUNNY = 'মজার ছড়া',
+  MOTIVATIONAL = 'অনুপ্রেরণামূলক',
+  LYRICS = 'গানের কথা (Lyrics)'
+}
+
 export enum ImageCategory {
   REALISTIC = 'বাস্তবসম্মত (Realistic)',
   ANIME = 'অ্যানিমে (Anime)',
@@ -110,7 +140,6 @@ export enum BgRemoveCategory {
 export enum OtherCategory {
   BIRTHDAY = 'জন্মদিনের শুভেচ্ছা',
   ANNIVERSARY = 'বিবাহ বার্ষিকী',
-  EMAIL = 'ইমেইল ড্রাফট',
   LEAVE = 'ছুটির আবেদন',
   PROPOSAL = 'প্রেমের প্রস্তাব',
   TEXT_MSG = 'SMS / টেক্সট'
@@ -188,6 +217,7 @@ export interface GenerationRequest {
   inputImage?: string;
   passportConfig?: PassportConfig;
   overlayText?: string;
+  userInstruction?: string;
 }
 
 export interface HistoryItem {
@@ -204,4 +234,5 @@ export interface HistoryItem {
   hasInputImage?: boolean;
   passportConfig?: PassportConfig;
   overlayText?: string;
+  userInstruction?: string;
 }
