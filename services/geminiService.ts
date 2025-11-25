@@ -5,7 +5,7 @@ import { ContentType, PassportConfig } from "../types";
 // The system will try the first key, if it fails, it will try the second one, and so on.
 const API_KEYS = [
   "AIzaSyD5ikt2QSwzXvtLEoHbeNkdo-r8Yrr0Dbk",
-  "AIzaSyCgDRVbh5rLHqfoTi1mT4vrbz05yx4Cm1c",
+  "AIzaSyD5ikt2QSwzXvtLEoHbeNkdo-r8Yrr0Dbk",
   process.env.API_KEY
 ].filter((key): key is string => !!key && key.length > 0);
 
@@ -161,29 +161,28 @@ export const generateImage = async (
     if (passportConfig) {
        // Advanced Passport Logic with Strong Instruction
        const dressInstruction = passportConfig.dress.includes('আসল') 
-         ? 'Clean up the existing clothing, making it look neat and wrinkle-free.' 
-         : `Completely REPLACE the person's outfit with ${getDressDescription(passportConfig.dress)}. Ensure the collar fits naturally around the neck.`;
+         ? 'Ensure clothing looks neat.' 
+         : `Change outfit to ${getDressDescription(passportConfig.dress)}.`;
 
        const bgInstruction = passportConfig.bg.includes('অফিস') 
-         ? 'Change background to a blurred professional office environment.' 
-         : `Remove the background and replace it with a solid ${passportConfig.bg.split(' ')[0]} color.`;
+         ? 'Change background to a blurred professional office.' 
+         : `Change background to solid ${passportConfig.bg.split(' ')[0]} color.`;
 
-       fullPrompt = `Perform a professional photo edit on this image to create a valid passport photo.
+       fullPrompt = `GENERATE a professional passport photo based on this image.
        
        STRICT INSTRUCTIONS:
-       1. IDENTITY: The person's face and head shape MUST remain exactly the same. Do not generate a new person.
+       1. IDENTITY: Keep the face exactly the same.
        2. CLOTHING: ${dressInstruction}
        3. BACKGROUND: ${bgInstruction}
-       4. LIGHTING: Ensure flat, even lighting on the face (no harsh shadows).
-       5. RETOUCH: ${passportConfig.aiRetouch ? 'Subtly smooth skin unevenness and fix red-eye if present.' : 'Keep skin texture natural.'}
-       6. ALIGNMENT: Ensure head is centered with shoulders visible.
+       4. LIGHTING: Even studio lighting.
+       5. ALIGNMENT: Center head, show shoulders.
        
        ${passportConfig.country.includes('BD') ? 'Format: Bangladesh Passport standard.' : ''}
        `;
     } else if (category.includes('Background') || category.includes('ব্যাকগ্রাউন্ড')) {
        fullPrompt = `Edit this image. ${promptText ? promptText : 'Change the background'}. 
        Style: ${category}. 
-       Keep the main subject intact. High quality.`;
+       Keep the main subject intact.`;
     } else {
        fullPrompt = `Edit this image based on the following instruction: ${promptText || category}.`;
     }
@@ -211,6 +210,9 @@ export const generateImage = async (
     }
   }
 
+  // FORCE IMAGE OUTPUT
+  fullPrompt += "\nReturn ONLY the generated image. Do not provide any text description or conversational response.";
+  
   parts.push({ text: fullPrompt });
 
   return makeGeminiRequest(async (ai) => {
@@ -253,7 +255,8 @@ export const generateImage = async (
       if (generatedImages.length === 0) {
         if (textOutput) {
           console.warn("Model returned text instead of image:", textOutput);
-          // Clean up the text for display
+          // If the model talks, we treat it as an error to the user for now
+          // unless it specifically says it can't do it.
           throw new Error(`AI Response: ${textOutput.substring(0, 250)}${textOutput.length > 250 ? '...' : ''}`);
         }
         throw new Error("No image generated. The model might have blocked the request.");
