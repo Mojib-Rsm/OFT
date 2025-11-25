@@ -45,8 +45,7 @@ import {
   Palette,
   Shirt,
   Globe,
-  Type,
-  Paperclip
+  Type
 } from 'lucide-react';
 
 interface InputSectionProps {
@@ -136,7 +135,11 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     return [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type);
   };
   
-  const requiresUpload = (type: ContentType) => {
+  const supportsImageUpload = (type: ContentType) => {
+    return isImageTool(type);
+  };
+
+  const requiresImageUpload = (type: ContentType) => {
     return [ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type);
   };
 
@@ -181,7 +184,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   // Handle Paste Events
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
-      if (!requiresUpload(activeTab)) return;
+      if (!supportsImageUpload(activeTab)) return;
       
       const items = e.clipboardData?.items;
       if (items) {
@@ -283,7 +286,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       onClick={() => {
         setActiveTab(type);
         setOverlayText('');
-        if (!requiresUpload(type)) clearImage();
+        if (!supportsImageUpload(type)) clearImage();
       }}
       className={`relative group flex flex-row items-center justify-center px-4 py-2.5 rounded-xl transition-all duration-200 font-semibold text-sm font-bangla whitespace-nowrap flex-shrink-0 ${
         activeTab === type
@@ -453,11 +456,11 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         )}
 
         {/* Image Upload Area */}
-        {requiresUpload(activeTab) && (
+        {supportsImageUpload(activeTab) && (
            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1 flex items-center gap-1">
               <Upload size={12} />
-              আপনার ছবি আপলোড করুন
+              {requiresImageUpload(activeTab) ? "আপনার ছবি আপলোড করুন" : "রেফারেন্স ছবি আপলোড করুন (অপশনাল)"}
             </label>
             
             {!selectedImage ? (
@@ -624,7 +627,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={isLoading || (requiresUpload(activeTab) && !selectedImage)}
+          disabled={isLoading || (requiresImageUpload(activeTab) && !selectedImage)}
           className="relative w-full overflow-hidden group flex items-center justify-center space-x-2 text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 bg-[length:200%_auto] hover:bg-right focus:ring-4 focus:outline-none focus:ring-indigo-300 font-bold rounded-xl text-base px-6 py-4 text-center transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/40 transform active:scale-[0.99] font-bangla"
         >
           {isLoading ? (
