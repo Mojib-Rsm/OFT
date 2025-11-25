@@ -1,8 +1,39 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ContentType, PassportConfig } from "../types";
 
-const apiKey = process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+// API Keys with failover priority
+// The system will try the first key, if it fails, it will try the second one, and so on.
+const API_KEYS = [
+  "AIzaSyD5ikt2QSwzXvtLEoHbeNkdo-r8Yrr0Dbk",
+  "AIzaSyCgDRVbh5rLHqfoTi1mT4vrbz05yx4Cm1c",
+  process.env.API_KEY
+].filter((key): key is string => !!key && key.length > 0);
+
+// Helper function to execute API calls with rotation/failover logic
+const makeGeminiRequest = async <T>(
+  operation: (ai: GoogleGenAI) => Promise<T>
+): Promise<T> => {
+  if (API_KEYS.length === 0) {
+    throw new Error("API Key is missing. Please set the API_KEY environment variable or check configuration.");
+  }
+
+  let lastError: any = null;
+
+  for (const apiKey of API_KEYS) {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      return await operation(ai);
+    } catch (error: any) {
+      console.warn(`API Key ending in ...${apiKey.slice(-4)} failed. Trying next key. Reason:`, error.message);
+      lastError = error;
+      // Continue to the next key in the loop
+      continue;
+    }
+  }
+
+  // If all keys fail, throw the last error
+  throw lastError || new Error("All API keys failed to generate content.");
+};
 
 export const generateBanglaContent = async (
   type: ContentType,
@@ -12,10 +43,6 @@ export const generateBanglaContent = async (
   length?: string,
   party?: string
 ): Promise<string[]> => {
-  if (!apiKey) {
-    throw new Error("API Key is missing. Please set the API_KEY environment variable.");
-  }
-
   const modelId = "gemini-2.5-flash"; // Fast and capable for text generation
   
   const systemInstruction = `
@@ -58,36 +85,38 @@ export const generateBanglaContent = async (
     Return a JSON object with a single property 'options' which is an array of strings.
   `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: prompt,
-      config: {
-        systemInstruction: systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            options: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.STRING
+  return makeGeminiRequest(async (ai) => {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelId,
+        contents: prompt,
+        config: {
+          systemInstruction: systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              options: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.STRING
+                }
               }
             }
           }
         }
-      }
-    });
+      });
 
-    const jsonText = response.text;
-    if (!jsonText) return [];
+      const jsonText = response.text;
+      if (!jsonText) return [];
 
-    const parsed = JSON.parse(jsonText);
-    return parsed.options || [];
-  } catch (error) {
-    console.error("Error generating content:", error);
-    throw error;
-  }
+      const parsed = JSON.parse(jsonText);
+      return parsed.options || [];
+    } catch (error) {
+      console.error("Error inside generateBanglaContent:", error);
+      throw error;
+    }
+  });
 };
 
 // Helper function to map UI dress options to detailed English prompts for the AI
@@ -108,10 +137,7 @@ export const generateImage = async (
   passportConfig?: PassportConfig,
   overlayText?: string
 ): Promise<string[]> => {
-  if (!apiKey) {
-    throw new Error("API Key is missing.");
-  }
-
+  
   let fullPrompt = "";
   const parts: any[] = [];
   // Passport requires portrait ratio generally, handled by UI logic passing "3:4" or similar
@@ -187,55 +213,57 @@ export const generateImage = async (
 
   parts.push({ text: fullPrompt });
 
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: parts,
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: finalAspectRatio as any,
+  return makeGeminiRequest(async (ai) => {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: parts,
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: finalAspectRatio as any,
+          }
+        },
+      });
+
+      const generatedImages: string[] = [];
+      let textOutput = "";
+
+      // Parse response for image parts or rejection text
+      if (response.candidates && response.candidates[0]) {
+        // Check for safety block
+        if (response.candidates[0].finishReason === 'SAFETY') {
+          throw new Error("Generation blocked by safety settings. Please try a different image or prompt.");
         }
-      },
-    });
 
-    const generatedImages: string[] = [];
-    let textOutput = "";
-
-    // Parse response for image parts or rejection text
-    if (response.candidates && response.candidates[0]) {
-      // Check for safety block
-      if (response.candidates[0].finishReason === 'SAFETY') {
-        throw new Error("Generation blocked by safety settings. Please try a different image or prompt.");
-      }
-
-      if (response.candidates[0].content && response.candidates[0].content.parts) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData) {
-            const base64EncodeString = part.inlineData.data;
-            const imageUrl = `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
-            generatedImages.push(imageUrl);
-          } else if (part.text) {
-            textOutput += part.text;
+        if (response.candidates[0].content && response.candidates[0].content.parts) {
+          for (const part of response.candidates[0].content.parts) {
+            if (part.inlineData) {
+              const base64EncodeString = part.inlineData.data;
+              const imageUrl = `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
+              generatedImages.push(imageUrl);
+            } else if (part.text) {
+              textOutput += part.text;
+            }
           }
         }
       }
-    }
 
-    if (generatedImages.length === 0) {
-      if (textOutput) {
-        console.warn("Model returned text instead of image:", textOutput);
-        // Clean up the text for display
-        throw new Error(`AI Response: ${textOutput.substring(0, 250)}${textOutput.length > 250 ? '...' : ''}`);
+      if (generatedImages.length === 0) {
+        if (textOutput) {
+          console.warn("Model returned text instead of image:", textOutput);
+          // Clean up the text for display
+          throw new Error(`AI Response: ${textOutput.substring(0, 250)}${textOutput.length > 250 ? '...' : ''}`);
+        }
+        throw new Error("No image generated. The model might have blocked the request.");
       }
-      throw new Error("No image generated. The model might have blocked the request.");
+
+      return generatedImages;
+
+    } catch (error) {
+      console.error("Error generating image:", error);
+      throw error;
     }
-
-    return generatedImages;
-
-  } catch (error) {
-    console.error("Error generating image:", error);
-    throw error;
-  }
+  });
 };
