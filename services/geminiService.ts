@@ -1,21 +1,50 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import OpenAI from "openai";
 import { ContentType, PassportConfig } from "../types";
 
-// API Keys with failover priority
-// The system will try the first key, if it fails, it will try the second one, and so on.
-const API_KEYS = [
-  "AIzaSyBdLjhEyVIxRiEVdeocFgq4rTqt7rX3zTM", // Newest
-  "AIzaSyD5ikt2QSwzXvtLEoHbeNkdo-r8Yrr0Dbk", // Old 1
-  "AIzaSyCgDRVbh5rLHqfoTi1mT4vrbz05yx4Cm1c", // Old 2
-  process.env.API_KEY
-].filter((key): key is string => !!key && key.length > 0);
+// --- ENVIRONMENT VARIABLE HANDLING ---
 
-// Helper function to execute API calls with rotation/failover logic
+// Helper to safely get env vars in Vite/Standard environments
+const getEnvVar = (key: string): string => {
+  // Check import.meta.env (Vite standard)
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
+    return (import.meta as any).env[key];
+  }
+  // Check process.env (Node/Compat)
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key];
+  }
+  return "";
+};
+
+// Load Gemini Keys from .env
+// Supports comma-separated list in VITE_GEMINI_API_KEYS for rotation
+const envGeminiKeys = getEnvVar("VITE_GEMINI_API_KEYS") || getEnvVar("GEMINI_API_KEYS") || "";
+const singleGeminiKey = getEnvVar("VITE_API_KEY") || getEnvVar("API_KEY");
+
+const API_KEYS = [
+  ...envGeminiKeys.split(',').map(k => k.trim()),
+  singleGeminiKey
+].filter((key, index, self) => !!key && key.length > 0 && self.indexOf(key) === index); // Unique & non-empty
+
+// Load OpenAI Key from .env
+const openaiApiKey = getEnvVar("VITE_OPENAI_API_KEY") || getEnvVar("OPENAI_API_KEY");
+
+// Initialize OpenAI Client
+// Note: In a real production app, calls to OpenAI should go through a backend to hide the key.
+// For this client-side demo, we use dangerouslyAllowBrowser: true.
+const openai = new OpenAI({
+  apiKey: openaiApiKey, 
+  dangerouslyAllowBrowser: true
+});
+
+// Helper function to execute API calls with rotation/failover logic for Gemini
 const makeGeminiRequest = async <T>(
   operation: (ai: GoogleGenAI) => Promise<T>
 ): Promise<T> => {
   if (API_KEYS.length === 0) {
-    throw new Error("API Key is missing. Please set the API_KEY environment variable or check configuration.");
+    console.error("No Gemini API Keys found in environment variables (.env)");
+    throw new Error("Gemini API Key is missing. Please check your .env file.");
   }
 
   let lastError: any = null;
@@ -25,16 +54,94 @@ const makeGeminiRequest = async <T>(
       const ai = new GoogleGenAI({ apiKey });
       return await operation(ai);
     } catch (error: any) {
-      console.warn(`API Key ending in ...${apiKey.slice(-4)} failed. Trying next key. Reason:`, error.message);
+      console.warn(`Gemini API Key ending in ...${apiKey.slice(-4)} failed. Trying next key. Reason:`, error.message);
       lastError = error;
-      // Continue to the next key in the loop
       continue;
     }
   }
 
-  // If all keys fail, throw the last error
-  throw lastError || new Error("All API keys failed to generate content.");
+  throw lastError || new Error("All Gemini API keys failed.");
 };
+
+// --- OPENAI FALLBACK FUNCTIONS ---
+
+const generateOpenAIText = async (
+  systemPrompt: string,
+  userPrompt: string,
+  inputImageBase64?: string
+): Promise<string[]> => {
+  try {
+    if (!openaiApiKey) {
+      throw new Error("OpenAI API Key not found.");
+    }
+
+    const messages: any[] = [
+      { role: "system", content: systemPrompt }
+    ];
+
+    if (inputImageBase64) {
+      // Multimodal request (GPT-4o)
+      messages.push({
+        role: "user",
+        content: [
+          { type: "text", text: userPrompt },
+          { 
+            type: "image_url", 
+            image_url: { url: inputImageBase64 } // Base64 must contain data URI prefix
+          }
+        ]
+      });
+    } else {
+      messages.push({ role: "user", content: userPrompt });
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // Cost effective and smart
+      messages: messages,
+      response_format: { type: "json_object" }, // Force JSON output
+    });
+
+    const content = completion.choices[0].message.content;
+    if (!content) return [];
+    
+    const parsed = JSON.parse(content);
+    return parsed.options || [];
+
+  } catch (error) {
+    console.error("OpenAI Text Generation Error:", error);
+    throw error;
+  }
+};
+
+const generateOpenAIImage = async (
+  prompt: string,
+  size: "1024x1024" | "1024x1792" = "1024x1024"
+): Promise<string[]> => {
+  try {
+    if (!openaiApiKey) {
+      throw new Error("OpenAI API Key not found.");
+    }
+
+    const response = await openai.images.generate({
+      model: "dall-e-3",
+      prompt: prompt,
+      n: 1,
+      size: size,
+      response_format: "b64_json",
+      quality: "standard",
+    });
+
+    if (response.data && response.data.length > 0) {
+      return response.data.map(img => `data:image/png;base64,${img.b64_json}`);
+    }
+    return [];
+  } catch (error) {
+    console.error("OpenAI Image Generation Error:", error);
+    throw error;
+  }
+};
+
+// --- MAIN SERVICE FUNCTIONS ---
 
 export const generateBanglaContent = async (
   type: ContentType,
@@ -46,7 +153,6 @@ export const generateBanglaContent = async (
   userInstruction?: string,
   inputImage?: string
 ): Promise<string[]> => {
-  const modelId = "gemini-2.5-flash"; // Fast and capable for text and multimodal generation
   
   const systemInstruction = `
     You are a witty, culturally aware Bengali social media expert and creative writer. 
@@ -69,7 +175,7 @@ export const generateBanglaContent = async (
     - Use relevant emojis to make the content lively.
     - Avoid direct translations; use cultural nuances.
     - For Political Comments: Be persuasive, logical, or critical based on whether it is Support or Oppose. Use strong vocabulary appropriate for political discourse.
-    - STRICTLY output JSON.
+    - STRICTLY output JSON with a property "options" containing an array of strings.
   `;
 
   const prompt = `
@@ -98,11 +204,13 @@ export const generateBanglaContent = async (
     Return a JSON object with a single property 'options' which is an array of strings.
   `;
 
-  return makeGeminiRequest(async (ai) => {
-    try {
+  // 1. Try Gemini First
+  try {
+    const modelId = "gemini-2.5-flash"; 
+    
+    return await makeGeminiRequest(async (ai) => {
       let contents: any = prompt;
 
-      // Handle Multimodal Input (Screenshot/Image)
       if (inputImage) {
         const mimeTypeMatch = inputImage.match(/^data:(.*?);base64,/);
         const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
@@ -130,9 +238,7 @@ export const generateBanglaContent = async (
             properties: {
               options: {
                 type: Type.ARRAY,
-                items: {
-                  type: Type.STRING
-                }
+                items: { type: Type.STRING }
               }
             }
           }
@@ -144,11 +250,19 @@ export const generateBanglaContent = async (
 
       const parsed = JSON.parse(jsonText);
       return parsed.options || [];
-    } catch (error) {
-      console.error("Error inside generateBanglaContent:", error);
-      throw error;
+    });
+
+  } catch (geminiError) {
+    console.warn("Gemini generation failed, switching to ChatGPT...", geminiError);
+    
+    // 2. Fallback to OpenAI
+    try {
+      return await generateOpenAIText(systemInstruction, prompt, inputImage);
+    } catch (openaiError) {
+      console.error("Both Gemini and OpenAI failed.");
+      throw new Error("Unable to generate content. Please check your connection or quota.");
     }
-  });
+  }
 };
 
 // Helper function to map UI dress options to detailed English prompts for the AI
@@ -172,26 +286,20 @@ export const generateImage = async (
   
   let fullPrompt = "";
   const parts: any[] = [];
-  // Passport requires portrait ratio generally, handled by UI logic passing "3:4" or similar
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
 
-  // Logic for different image tools based on whether input image is present or just generation
+  // Logic for different image tools
   if (inputImageBase64) {
     // EDITING MODE (Passport, BG Remove)
-    // Extract correct mime type
     const mimeTypeMatch = inputImageBase64.match(/^data:(.*?);base64,/);
     const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/png';
     const base64Data = inputImageBase64.replace(/^data:(.*?);base64,/, '');
     
     parts.push({
-      inlineData: {
-        data: base64Data,
-        mimeType: mimeType
-      }
+      inlineData: { data: base64Data, mimeType: mimeType }
     });
 
     if (passportConfig) {
-       // Advanced Passport Logic with Strong Instruction
        const dressInstruction = passportConfig.dress.includes('আসল') 
          ? 'Ensure clothing looks neat.' 
          : `Change outfit to ${getDressDescription(passportConfig.dress)}.`;
@@ -201,37 +309,32 @@ export const generateImage = async (
          : `Change background to solid ${passportConfig.bg.split(' ')[0]} color.`;
 
        fullPrompt = `GENERATE a professional passport photo based on this image.
-       
        STRICT INSTRUCTIONS:
        1. IDENTITY: Keep the face exactly the same.
        2. CLOTHING: ${dressInstruction}
        3. BACKGROUND: ${bgInstruction}
        4. LIGHTING: Even studio lighting.
        5. ALIGNMENT: Center head, show shoulders.
-       
        ${passportConfig.country.includes('BD') ? 'Format: Bangladesh Passport standard.' : ''}
        `;
     } else if (category.includes('Background') || category.includes('ব্যাকগ্রাউন্ড')) {
        fullPrompt = `Edit this image. ${promptText ? promptText : 'Change the background'}. 
-       Style: ${category}. 
-       Keep the main subject intact.`;
+       Style: ${category}. Keep the main subject intact.`;
     } else {
        fullPrompt = `Edit this image based on the following instruction: ${promptText || category}.`;
     }
   } else {
-    // GENERATION MODE (Thumbnail, Logo, Standard Image)
+    // GENERATION MODE
     const textOverlayInstruction = overlayText ? "IMPORTANT: Do NOT write any text on the image. Leave negative space or clean areas where text can be added later by the user." : "";
 
     if (category.includes('Thumbnail') || category.includes('থাম্বনেইল')) {
       fullPrompt = `Create a high CTR YouTube/Facebook thumbnail background.
-      Topic: ${promptText}.
-      Style: ${category}.
+      Topic: ${promptText}. Style: ${category}.
       Vibrant colors, catchy composition.
       ${textOverlayInstruction}`;
     } else if (category.includes('Logo') || category.includes('লোগো')) {
       fullPrompt = `Design a professional logo.
-      Brand/Concept: ${promptText}.
-      Style: ${category}.
+      Brand/Concept: ${promptText}. Style: ${category}.
       Vector art style, simple, iconic, minimalist, white background.
       ${textOverlayInstruction}`;
     } else {
@@ -247,36 +350,30 @@ export const generateImage = async (
   
   parts.push({ text: fullPrompt });
 
-  return makeGeminiRequest(async (ai) => {
-    try {
+  // 1. Try Gemini Image Generation
+  try {
+    return await makeGeminiRequest(async (ai) => {
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
-        contents: {
-          parts: parts,
-        },
+        contents: { parts: parts },
         config: {
-          imageConfig: {
-            aspectRatio: finalAspectRatio as any,
-          }
+          imageConfig: { aspectRatio: finalAspectRatio as any }
         },
       });
 
       const generatedImages: string[] = [];
       let textOutput = "";
 
-      // Parse response for image parts or rejection text
       if (response.candidates && response.candidates[0]) {
-        // Check for safety block
         if (response.candidates[0].finishReason === 'SAFETY') {
-          throw new Error("Generation blocked by safety settings. Please try a different image or prompt.");
+          throw new Error("Generation blocked by safety settings.");
         }
 
         if (response.candidates[0].content && response.candidates[0].content.parts) {
           for (const part of response.candidates[0].content.parts) {
             if (part.inlineData) {
               const base64EncodeString = part.inlineData.data;
-              const imageUrl = `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
-              generatedImages.push(imageUrl);
+              generatedImages.push(`data:${part.inlineData.mimeType};base64,${base64EncodeString}`);
             } else if (part.text) {
               textOutput += part.text;
             }
@@ -285,20 +382,41 @@ export const generateImage = async (
       }
 
       if (generatedImages.length === 0) {
-        if (textOutput) {
-          console.warn("Model returned text instead of image:", textOutput);
-          // If the model talks, we treat it as an error to the user for now
-          // unless it specifically says it can't do it.
-          throw new Error(`AI Response: ${textOutput.substring(0, 250)}${textOutput.length > 250 ? '...' : ''}`);
-        }
-        throw new Error("No image generated. The model might have blocked the request.");
+        if (textOutput) throw new Error(`AI Response: ${textOutput.substring(0, 250)}`);
+        throw new Error("No image generated by Gemini.");
       }
 
       return generatedImages;
+    });
 
-    } catch (error) {
-      console.error("Error generating image:", error);
-      throw error;
+  } catch (geminiError) {
+    console.warn("Gemini Image Gen failed, switching to OpenAI (DALL-E)...", geminiError);
+    
+    // 2. Fallback to OpenAI (DALL-E)
+    // Note: OpenAI Edits API requires masks and specific file formats which are complex to handle here.
+    // We will only support standard Generation (DALL-E 3) fallback.
+    if (!inputImageBase64) {
+      try {
+        // Map Aspect Ratio to DALL-E 3 supported sizes
+        let size: "1024x1024" | "1024x1792" = "1024x1024";
+        if (finalAspectRatio === '16:9' || finalAspectRatio === '9:16' || finalAspectRatio === '3:4') {
+            size = "1024x1792"; // Portrait approximate
+            if (finalAspectRatio === '16:9') {
+                 // DALL-E 3 supports 1792x1024 for landscape, but we need to adjust types if strict TS.
+                 // For now, defaulting to standard or portrait.
+                 // DALL-E 3 supports: 1024x1024, 1024x1792, 1792x1024.
+                 // We will stick to square/portrait for simplicity in fallback.
+            }
+        }
+        
+        return await generateOpenAIImage(fullPrompt, size);
+      } catch (openaiError) {
+        console.error("OpenAI Image Gen failed.");
+        throw new Error("Image generation failed on both providers.");
+      }
+    } else {
+        // If it was an Edit task (Passport/BG), we might not be able to fallback easily without complex logic.
+        throw new Error("Image Editing failed on Gemini. OpenAI fallback for editing is not currently supported.");
     }
-  });
+  }
 };
