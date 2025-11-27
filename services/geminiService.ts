@@ -170,7 +170,8 @@ export const generateBanglaContent = async (
     8. Ad Copies: Catchy headline, benefit-driven body, strong Call to Action (CTA).
     9. Poems: Rhythmic, artistic, stanza-based structure.
     10. PDF Maker: Structured professional documents (CV, Report, Application). USE MARKDOWN for formatting: use **bold** for headings/key terms, and use newlines for spacing.
-    11. Others: Formal or informal messages based on the specific category (SMS, Birthday, etc.).
+    11. Image To Text (OCR): Act as a precise Optical Character Recognition (OCR) scanner. Extract text verbatim from images. Maintain original paragraphs and lists. Support both Bengali and English in the same document.
+    12. Others: Formal or informal messages based on the specific category (SMS, Birthday, etc.).
 
     Guidelines:
     - Use authentic informal Bengali (colloquial/internet slang mixed with standard Bangla where appropriate).
@@ -180,7 +181,7 @@ export const generateBanglaContent = async (
     - STRICTLY output JSON with a property "options" containing an array of strings.
   `;
 
-  const prompt = `
+  let prompt = `
     Generate 5 distinct options for a ${type} in Bengali based on the following details:
     - Category: ${category}
     - Context/Topic: ${context || 'General/Random'}
@@ -206,6 +207,24 @@ export const generateBanglaContent = async (
     
     Return a JSON object with a single property 'options' which is an array of strings.
   `;
+
+  // SPECIAL PROMPT FOR IMAGE TO TEXT (OCR)
+  if (type === ContentType.IMG_TO_TEXT) {
+      prompt = `
+      Act as a highly accurate OCR (Optical Character Recognition) tool for Bengali and English text.
+      
+      Task:
+      1. Analyze the attached image(s) and extract ALL visible text.
+      2. Fix any potential spelling errors caused by image noise, especially in complex Bangla conjuncts (যুক্তবর্ণ).
+      3. Maintain the original formatting structure (paragraphs, lists, newlines) as closely as possible.
+      4. If it's handwritten and hard to read, infer the most logical text based on context.
+      5. Do NOT summarize. Provide the full extracted text.
+      6. If the image contains a table, try to format it with dashes or spacing.
+      
+      Output:
+      Return a JSON object with property "options" containing an array with ONE string: the full extracted text.
+      `;
+  }
 
   // 1. Try Gemini First
   try {

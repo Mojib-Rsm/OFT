@@ -15,6 +15,7 @@ export enum ContentType {
   PASSPORT = 'পাসপোর্ট ফটো',
   BG_REMOVE = 'ব্যাকগ্রাউন্ড এডিটর',
   PDF_MAKER = 'পিডিএফ মেকার (PDF)',
+  IMG_TO_TEXT = 'ইমেজ টু টেক্সট (OCR)',
   OTHER = 'অন্যান্য'
 }
 
@@ -111,6 +112,14 @@ export enum PdfCategory {
   ASSIGNMENT = 'অ্যাসাইনমেন্ট',
   COVER_LETTER = 'কভার লেটার',
   INVOICE = 'ইনভয়েস / মেমো'
+}
+
+export enum ImgToTextCategory {
+  DOCUMENT = 'ডকুমেন্ট / পিডিএফ পেজ',
+  HANDWRITTEN = 'হাতের লেখা (Handwritten)',
+  BANNER = 'ব্যানার / পোস্টার',
+  TABLE = 'টেবিল / চার্ট ডাটা',
+  MATH = 'গাণিতিক সমস্যা / অংক'
 }
 
 export enum ImageCategory {

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Copy, Check, Share2, CornerDownRight, Download, Image as ImageIcon, Printer, Grid, Type, FileDown } from 'lucide-react';
+import { Copy, Check, Share2, CornerDownRight, Download, Image as ImageIcon, Printer, Grid, Type, FileDown, FileText } from 'lucide-react';
 
 interface ResultCardProps {
   content: string;
@@ -145,6 +145,38 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
     } else {
       alert('পপ-আপ ব্লক করা আছে। দয়া করে পপ-আপ এলাউ করুন।');
     }
+  };
+
+  const handleDocDownload = () => {
+    // Create a basic HTML structure that Word can interpret
+    const formattedHtml = displayContent
+      .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+      .replace(/\n/g, '<br>');
+
+    const htmlContent = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset='utf-8'>
+        <title>OFT AI Generated Doc</title>
+      </head>
+      <body style='font-family: Arial, sans-serif; font-size: 12pt;'>
+        ${formattedHtml}
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob(['\ufeff', htmlContent], {
+      type: 'application/msword'
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `oft-ai-document-${Date.now()}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleShare = async () => {
@@ -320,6 +352,16 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
                  </>
                ) : (
                  <>
+                 {/* Word Download Button */}
+                 <button
+                    onClick={handleDocDownload}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 border border-transparent hover:border-blue-200"
+                    title="Word ফাইল ডাউনলোড"
+                  >
+                    <FileText size={14} />
+                    <span className="hidden xs:inline">Word</span>
+                  </button>
+
                  {/* PDF Download Button */}
                   <button
                     onClick={handlePdfDownload}

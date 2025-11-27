@@ -12,6 +12,7 @@ import {
   AdCopyCategory,
   PoemCategory,
   PdfCategory,
+  ImgToTextCategory,
   ImageCategory, 
   ThumbnailCategory, 
   LogoCategory, 
@@ -58,7 +59,8 @@ import {
   Feather,
   FileDown,
   Users,
-  Plus
+  Plus,
+  ScanText
 } from 'lucide-react';
 
 interface InputSectionProps {
@@ -102,6 +104,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [adCopyCategory, setAdCopyCategory] = useState<string>(AdCopyCategory.FB_AD);
   const [poemCategory, setPoemCategory] = useState<string>(PoemCategory.ROMANTIC);
   const [pdfCategory, setPdfCategory] = useState<string>(PdfCategory.APPLICATION);
+  const [imgToTextCategory, setImgToTextCategory] = useState<string>(ImgToTextCategory.DOCUMENT);
   const [imageCategory, setImageCategory] = useState<string>(ImageCategory.REALISTIC);
   const [thumbnailCategory, setThumbnailCategory] = useState<string>(ThumbnailCategory.YOUTUBE);
   const [logoCategory, setLogoCategory] = useState<string>(LogoCategory.MINIMALIST);
@@ -112,7 +115,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [ppCountry, setPpCountry] = useState<string>(PassportCountry.BD);
   const [ppBg, setPpBg] = useState<string>(PassportBg.WHITE);
   const [ppDress, setPpDress] = useState<string>(PassportDress.ORIGINAL);
-  const [ppCoupleDress, setPpCoupleDress] = useState<string>(CoupleDress.FORMAL);
+  const [ppCoupleDress, setPpCoupleDress] = useState<string>(CoupleDress.ORIGINAL);
   const [ppRetouch, setPpRetouch] = useState<boolean>(true);
 
   const [context, setContext] = useState<string>('');
@@ -141,6 +144,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.AD_COPY: return adCopyCategory;
       case ContentType.POEM: return poemCategory;
       case ContentType.PDF_MAKER: return pdfCategory;
+      case ContentType.IMG_TO_TEXT: return imgToTextCategory;
       case ContentType.IMAGE: return imageCategory;
       case ContentType.THUMBNAIL: return thumbnailCategory;
       case ContentType.LOGO: return logoCategory;
@@ -159,13 +163,13 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     return [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type);
   };
   
-  // Updated logic to support image upload for Comments (Screenshots)
+  // Updated logic to support image upload for Comments (Screenshots) and ImgToText
   const supportsImageUpload = (type: ContentType) => {
-    return isImageTool(type) || type === ContentType.COMMENT;
+    return isImageTool(type) || type === ContentType.COMMENT || type === ContentType.IMG_TO_TEXT;
   };
 
   const requiresImageUpload = (type: ContentType) => {
-    return [ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type);
+    return [ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.IMG_TO_TEXT].includes(type);
   };
   
   // Allow multiple images if Passport Couple is selected
@@ -291,6 +295,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.AD_COPY: categories = AdCopyCategory; currentValue = adCopyCategory; setter = setAdCopyCategory; break;
       case ContentType.POEM: categories = PoemCategory; currentValue = poemCategory; setter = setPoemCategory; break;
       case ContentType.PDF_MAKER: categories = PdfCategory; currentValue = pdfCategory; setter = setPdfCategory; break;
+      case ContentType.IMG_TO_TEXT: categories = ImgToTextCategory; currentValue = imgToTextCategory; setter = setImgToTextCategory; break;
       case ContentType.IMAGE: categories = ImageCategory; currentValue = imageCategory; setter = setImageCategory; break;
       case ContentType.THUMBNAIL: categories = ThumbnailCategory; currentValue = thumbnailCategory; setter = setThumbnailCategory; break;
       case ContentType.LOGO: categories = LogoCategory; currentValue = logoCategory; setter = setLogoCategory; break;
@@ -323,6 +328,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.AD_COPY: return "উদাহরণ: নতুন টি-শার্ট কালেকশন, ডিজিটাল মার্কেটিং কোর্স...";
       case ContentType.POEM: return "উদাহরণ: বর্ষাকাল নিয়ে কবিতা, ভালোবাসার ছন্দ...";
       case ContentType.PDF_MAKER: return "উদাহরণ: আপনার যোগ্যতা, অভিজ্ঞতা ও স্কিলগুলো লিখুন (সিভির জন্য)...";
+      case ContentType.IMG_TO_TEXT: return "কোনো অতিরিক্ত নির্দেশনা থাকলে লিখুন (যেমন: শুধুমাত্র ইংরেজি অংশটুকু নাও)...";
       case ContentType.IMAGE: return "উদাহরণ: একটি বিড়াল সানগ্লাস পড়ে বাইক চালাচ্ছে...";
       case ContentType.THUMBNAIL: return "উদাহরণ: 'How to make money online' বা 'গেমিং লাইভস্ট্রিম'...";
       case ContentType.LOGO: return "উদাহরণ: একটি কফি শপের লোগো, বা টেক স্টার্টআপের লোগো...";
@@ -336,6 +342,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const getImageUploadLabel = () => {
     if (requiresImageUpload(activeTab)) {
        if (allowMultipleImages) return `আপনার ছবি আপলোড করুন (${selectedImages.length}/${maxImages})`;
+       if (activeTab === ContentType.IMG_TO_TEXT) return "ডকুমেন্ট / ইমেজের ছবি আপলোড করুন";
        return "আপনার ছবি আপলোড করুন";
     }
     if (activeTab === ContentType.COMMENT) return "স্ক্রিনশট আপলোড করুন (অপশনাল)";
@@ -396,6 +403,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           <TabButton type={ContentType.EMAIL} icon={Mail} label="ইমেইল" />
           <TabButton type={ContentType.AD_COPY} icon={Megaphone} label="অ্যাড" />
           <TabButton type={ContentType.PDF_MAKER} icon={FileDown} label="PDF মেকার" />
+          <TabButton type={ContentType.IMG_TO_TEXT} icon={ScanText} label="ইমেজ টু টেক্সট" />
           
           <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
           
@@ -504,7 +512,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           <div className="grid grid-cols-1 gap-6">
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
-                {isImageTool(activeTab) ? "স্টাইল / ক্যাটাগরি" : "মুড / ক্যাটাগরি"}
+                {isImageTool(activeTab) || activeTab === ContentType.IMG_TO_TEXT ? "স্টাইল / ক্যাটাগরি" : "মুড / ক্যাটাগরি"}
               </label>
               <div className="relative group">
                 {renderCategoryOptions()}
@@ -515,7 +523,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
             </div>
 
             {/* Political Party Selection */}
-            {isPolitical(getActiveCategoryValue()) && !isImageTool(activeTab) && (
+            {isPolitical(getActiveCategoryValue()) && !isImageTool(activeTab) && activeTab !== ContentType.IMG_TO_TEXT && (
               <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                 <label className="text-xs font-bold text-indigo-600 uppercase tracking-wider font-bangla ml-1 flex items-center gap-2">
                   <Flag size={12} />
@@ -623,7 +631,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         <div className="space-y-2">
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
             {activeTab === ContentType.BIO ? "আপনার সম্পর্কে / কিওয়ার্ডস" 
-             : isImageTool(activeTab) ? "অতিরিক্ত নির্দেশনা (অপশনাল)" 
+             : isImageTool(activeTab) || activeTab === ContentType.IMG_TO_TEXT ? "অতিরিক্ত নির্দেশনা (অপশনাল)" 
              : activeTab === ContentType.PDF_MAKER ? "বিষয়বস্তু / তথ্য (Details)"
              : "বিষয় / প্রসঙ্গ (যেমন: পোস্টটি কিসের?)"}
           </label>
@@ -700,7 +708,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         )}
 
         {/* Advanced Options Toggle (Hidden for Passport) */}
-        {!isImageTool(activeTab) && (
+        {!isImageTool(activeTab) && activeTab !== ContentType.IMG_TO_TEXT && (
           <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
             <button
               type="button"
@@ -764,16 +772,18 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           {isLoading ? (
             <>
               <Loader2 className="animate-spin" size={20} />
-              <span>{isImageTool(activeTab) ? 'প্রসেস হচ্ছে...' : 'কন্টেন্ট জেনারেট করুন'}</span>
+              <span>{isImageTool(activeTab) || activeTab === ContentType.IMG_TO_TEXT ? 'প্রসেস হচ্ছে...' : 'কন্টেন্ট জেনারেট করুন'}</span>
             </>
           ) : (
             <>
               {isImageTool(activeTab) ? (
                 <ImageIcon size={20} className="group-hover:scale-110 transition-transform duration-300" />
+              ) : activeTab === ContentType.IMG_TO_TEXT ? (
+                <ScanText size={20} className="group-hover:scale-110 transition-transform duration-300" />
               ) : (
                 <Wand2 size={20} className="group-hover:rotate-12 transition-transform duration-300" />
               )}
-              <span>{isImageTool(activeTab) ? 'জেনারেট / এডিট করুন' : 'কন্টেন্ট জেনারেট করুন'}</span>
+              <span>{isImageTool(activeTab) || activeTab === ContentType.IMG_TO_TEXT ? 'জেনারেট / এক্সট্রাক্ট করুন' : 'কন্টেন্ট জেনারেট করুন'}</span>
             </>
           )}
         </button>

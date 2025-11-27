@@ -20,7 +20,8 @@ import {
   Mail,
   Megaphone,
   Feather,
-  FileDown
+  FileDown,
+  ScanText
 } from 'lucide-react';
 import { ContentType } from '../types';
 
@@ -79,6 +80,7 @@ const ToolGrid: React.FC<ToolGridProps> = ({ onSelectTool }) => {
         { type: ContentType.AD_COPY, label: 'বিজ্ঞাপন / অ্যাড', icon: Megaphone, desc: 'ফেসবুক অ্যাড ও মার্কেটিং' },
         { type: ContentType.SCRIPT, label: 'ভিডিও স্ক্রিপ্ট', icon: Video, desc: 'রিলস ও ভিডিওর প্ল্যান' },
         { type: ContentType.PDF_MAKER, label: 'PDF মেকার', icon: FileDown, desc: 'সিভি, রিপোর্ট ও ডক' },
+        { type: ContentType.IMG_TO_TEXT, label: 'ইমেজ টু টেক্সট', icon: ScanText, desc: 'ইমেজ থেকে লেখা (OCR)' },
         { type: ContentType.OTHER, label: 'অন্যান্য টুলস', icon: MoreHorizontal, desc: 'এসএমএস, উইশ এবং অন্যান্য' },
       ]
     }
