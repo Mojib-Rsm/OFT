@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import OpenAI from "openai";
 import { ContentType, PassportConfig } from "../types";
@@ -151,7 +152,7 @@ export const generateBanglaContent = async (
   length?: string,
   party?: string,
   userInstruction?: string,
-  inputImage?: string
+  inputImages?: string[]
 ): Promise<string[]> => {
   
   const systemInstruction = `
@@ -168,7 +169,8 @@ export const generateBanglaContent = async (
     7. Emails: Professional or formal format. Subject line must be included.
     8. Ad Copies: Catchy headline, benefit-driven body, strong Call to Action (CTA).
     9. Poems: Rhythmic, artistic, stanza-based structure.
-    10. Others: Formal or informal messages based on the specific category (SMS, Birthday, etc.).
+    10. PDF Maker: Structured professional documents (CV, Report, Application). USE MARKDOWN for formatting: use **bold** for headings/key terms, and use newlines for spacing.
+    11. Others: Formal or informal messages based on the specific category (SMS, Birthday, etc.).
 
     Guidelines:
     - Use authentic informal Bengali (colloquial/internet slang mixed with standard Bangla where appropriate).
@@ -186,7 +188,7 @@ export const generateBanglaContent = async (
     ${tone ? `- Tone/Mood: ${tone}` : ''}
     ${length ? `- Desired Length: ${length}` : ''}
     ${userInstruction ? `- Specific User Instruction/Point to include: ${userInstruction}` : ''}
-    ${inputImage ? `- Attached Image: This is a screenshot/image. Read any text visible in it and analyze the visual context to generate relevant comments.` : ''}
+    ${inputImages && inputImages.length > 0 ? `- Attached Image(s): This is a screenshot/image. Read any text visible in it and analyze the visual context to generate relevant comments.` : ''}
     
     Specific Instructions:
     - If Bio: Make them look aesthetic (e.g., using "Official Account | Dreamer" style or poetic lines).
@@ -195,6 +197,7 @@ export const generateBanglaContent = async (
     - If Email: Include "Subject:" at the top, then the body.
     - If Ad Copy: Use "Headline:", "Body:", "CTA:" structure.
     - If Poem: Use artistic rhyming and stanzas.
+    - If PDF Maker: Create a structured document. Use **Bold** for titles and important labels. Ensure proper spacing (newlines) between sections.
     - If Advanced Tone is 'Sarcastic', be witty and edgy.
     - If Advanced Tone is 'Professional', use proper standard Bangla (Shuddho).
     - If a Political Party is specified, ensure the content specifically targets that party based on the category (e.g., if category is Support, praise them; if Oppose, criticize them).
@@ -209,23 +212,24 @@ export const generateBanglaContent = async (
     const modelId = "gemini-2.5-flash"; 
     
     return await makeGeminiRequest(async (ai) => {
-      let contents: any = prompt;
-
-      if (inputImage) {
-        const mimeTypeMatch = inputImage.match(/^data:(.*?);base64,/);
-        const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
-        const base64Data = inputImage.replace(/^data:(.*?);base64,/, '');
-
-        contents = [
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: base64Data
-            }
-          },
-          { text: prompt }
-        ];
+      let contents: any[] = [];
+      
+      if (inputImages && inputImages.length > 0) {
+        inputImages.forEach(img => {
+           const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
+           const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
+           const base64Data = img.replace(/^data:(.*?);base64,/, '');
+           
+           contents.push({
+             inlineData: {
+               mimeType: mimeType,
+               data: base64Data
+             }
+           });
+        });
       }
+      
+      contents.push({ text: prompt });
 
       const response = await ai.models.generateContent({
         model: modelId,
@@ -257,7 +261,9 @@ export const generateBanglaContent = async (
     
     // 2. Fallback to OpenAI
     try {
-      return await generateOpenAIText(systemInstruction, prompt, inputImage);
+      // OpenAI fallback currently supports only one image in this simple implementation
+      // Use the first image if available
+      return await generateOpenAIText(systemInstruction, prompt, inputImages ? inputImages[0] : undefined);
     } catch (openaiError) {
       console.error("Both Gemini and OpenAI failed.");
       throw new Error("Unable to generate content. Please check your connection or quota.");
@@ -266,12 +272,26 @@ export const generateBanglaContent = async (
 };
 
 // Helper function to map UI dress options to detailed English prompts for the AI
-const getDressDescription = (dressType: string): string => {
+const getDressDescription = (dressType: string, coupleDress?: string): string => {
+  // Couple Logic
+  if (dressType.includes('কাপল') || dressType.includes('Couple')) {
+     if (coupleDress) {
+        if (coupleDress.includes('Original') || coupleDress.includes('আসল')) return "their original clothing, ensuring it looks neat, clean and professional";
+        if (coupleDress.includes('FORMAL')) return "matching formal professional attire for both persons (dark navy business suit for man, formal black blazer or professional saree for woman)";
+        if (coupleDress.includes('TRADITIONAL')) return "matching traditional attire for both persons (punjabi/kurta for man, saree/salwar kameez for woman)";
+        if (coupleDress.includes('MATCHING_WHITE')) return "matching white shirts or white outfits for both persons";
+        if (coupleDress.includes('CASUAL')) return "smart casual outfits for both persons";
+     }
+     return "matching formal professional attire for both persons";
+  }
+
+  // Single Logic
   if (dressType.includes('সুট')) return "a professional dark navy blue business suit with a white shirt and a silk tie";
   if (dressType.includes('সাদা শার্ট')) return "a crisp, clean white formal button-down shirt";
   if (dressType.includes('ব্লেজার')) return "a formal black blazer worn over a professional blouse";
   if (dressType.includes('মার্জিত')) return "modest, formal traditional or professional attire suitable for official documents";
   if (dressType.includes('ইউনিফর্ম') || dressType.includes('Student')) return "a standard white formal school uniform shirt with a collar";
+  
   return "formal official attire suitable for passport photos";
 };
 
@@ -279,7 +299,7 @@ export const generateImage = async (
   category: string,
   promptText: string,
   aspectRatio: string = "1:1",
-  inputImageBase64?: string,
+  inputImages?: string[], // Changed to array
   passportConfig?: PassportConfig,
   overlayText?: string
 ): Promise<string[]> => {
@@ -289,33 +309,43 @@ export const generateImage = async (
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
 
   // Logic for different image tools
-  if (inputImageBase64) {
+  if (inputImages && inputImages.length > 0) {
     // EDITING MODE (Passport, BG Remove)
-    const mimeTypeMatch = inputImageBase64.match(/^data:(.*?);base64,/);
-    const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/png';
-    const base64Data = inputImageBase64.replace(/^data:(.*?);base64,/, '');
-    
-    parts.push({
-      inlineData: { data: base64Data, mimeType: mimeType }
+    inputImages.forEach(img => {
+       const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
+       const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/png';
+       const base64Data = img.replace(/^data:(.*?);base64,/, '');
+       
+       parts.push({
+         inlineData: { data: base64Data, mimeType: mimeType }
+       });
     });
 
     if (passportConfig) {
        const dressInstruction = passportConfig.dress.includes('আসল') 
          ? 'Ensure clothing looks neat.' 
-         : `Change outfit to ${getDressDescription(passportConfig.dress)}.`;
+         : `Change outfit to ${getDressDescription(passportConfig.dress, passportConfig.coupleDress)}.`;
 
        const bgInstruction = passportConfig.bg.includes('অফিস') 
          ? 'Change background to a blurred professional office.' 
          : `Change background to solid ${passportConfig.bg.split(' ')[0]} color.`;
 
-       fullPrompt = `GENERATE a professional passport photo based on this image.
+       const isCouple = passportConfig.dress.includes('Couple') || passportConfig.dress.includes('কাপল');
+       
+       let identityInstruction = isCouple ? 'faces of the people' : 'face';
+       if (isCouple && inputImages.length > 1) {
+          identityInstruction = "faces of the people from the provided source images (Combine them if needed)";
+       }
+
+       fullPrompt = `GENERATE a professional passport photo based on the provided image(s).
        STRICT INSTRUCTIONS:
-       1. IDENTITY: Keep the face exactly the same.
+       1. IDENTITY: Keep the ${identityInstruction} exactly the same.
        2. CLOTHING: ${dressInstruction}
        3. BACKGROUND: ${bgInstruction}
        4. LIGHTING: Even studio lighting.
-       5. ALIGNMENT: Center head, show shoulders.
+       5. ALIGNMENT: Center ${isCouple ? 'heads' : 'head'}, show shoulders.
        ${passportConfig.country.includes('BD') ? 'Format: Bangladesh Passport standard.' : ''}
+       ${inputImages.length > 1 ? 'MERGE/COMPOSE the subjects from the input images into a single professional frame.' : ''}
        `;
     } else if (category.includes('Background') || category.includes('ব্যাকগ্রাউন্ড')) {
        fullPrompt = `Edit this image. ${promptText ? promptText : 'Change the background'}. 
@@ -393,20 +423,12 @@ export const generateImage = async (
     console.warn("Gemini Image Gen failed, switching to OpenAI (DALL-E)...", geminiError);
     
     // 2. Fallback to OpenAI (DALL-E)
-    // Note: OpenAI Edits API requires masks and specific file formats which are complex to handle here.
-    // We will only support standard Generation (DALL-E 3) fallback.
-    if (!inputImageBase64) {
+    if (!inputImages || inputImages.length === 0) {
       try {
         // Map Aspect Ratio to DALL-E 3 supported sizes
         let size: "1024x1024" | "1024x1792" = "1024x1024";
         if (finalAspectRatio === '16:9' || finalAspectRatio === '9:16' || finalAspectRatio === '3:4') {
-            size = "1024x1792"; // Portrait approximate
-            if (finalAspectRatio === '16:9') {
-                 // DALL-E 3 supports 1792x1024 for landscape, but we need to adjust types if strict TS.
-                 // For now, defaulting to standard or portrait.
-                 // DALL-E 3 supports: 1024x1024, 1024x1792, 1792x1024.
-                 // We will stick to square/portrait for simplicity in fallback.
-            }
+            size = "1024x1792"; 
         }
         
         return await generateOpenAIImage(fullPrompt, size);
@@ -415,8 +437,7 @@ export const generateImage = async (
         throw new Error("Image generation failed on both providers.");
       }
     } else {
-        // If it was an Edit task (Passport/BG), we might not be able to fallback easily without complex logic.
-        throw new Error("Image Editing failed on Gemini. OpenAI fallback for editing is not currently supported.");
+        throw new Error("Image Editing/Composition with input images failed on Gemini. OpenAI fallback for editing is not currently supported.");
     }
   }
 };

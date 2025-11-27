@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   ContentType, 
@@ -10,12 +11,14 @@ import {
   EmailCategory,
   AdCopyCategory,
   PoemCategory,
+  PdfCategory,
   ImageCategory, 
   ThumbnailCategory, 
   LogoCategory, 
   PassportCountry,
   PassportBg,
   PassportDress,
+  CoupleDress,
   BgRemoveCategory, 
   OtherCategory, 
   ContentTone, 
@@ -52,13 +55,16 @@ import {
   PenLine,
   Mail,
   Megaphone,
-  Feather
+  Feather,
+  FileDown,
+  Users,
+  Plus
 } from 'lucide-react';
 
 interface InputSectionProps {
   initialTab?: ContentType;
   onBack?: () => void;
-  onGenerate: (type: ContentType, category: string, context: string, tone?: string, length?: string, party?: string, aspectRatio?: string, inputImage?: string, passportConfig?: any, overlayText?: string, userInstruction?: string) => void;
+  onGenerate: (type: ContentType, category: string, context: string, tone?: string, length?: string, party?: string, aspectRatio?: string, inputImages?: string[], passportConfig?: any, overlayText?: string, userInstruction?: string) => void;
   isLoading: boolean;
 }
 
@@ -95,6 +101,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [emailCategory, setEmailCategory] = useState<string>(EmailCategory.LEAVE);
   const [adCopyCategory, setAdCopyCategory] = useState<string>(AdCopyCategory.FB_AD);
   const [poemCategory, setPoemCategory] = useState<string>(PoemCategory.ROMANTIC);
+  const [pdfCategory, setPdfCategory] = useState<string>(PdfCategory.APPLICATION);
   const [imageCategory, setImageCategory] = useState<string>(ImageCategory.REALISTIC);
   const [thumbnailCategory, setThumbnailCategory] = useState<string>(ThumbnailCategory.YOUTUBE);
   const [logoCategory, setLogoCategory] = useState<string>(LogoCategory.MINIMALIST);
@@ -105,6 +112,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [ppCountry, setPpCountry] = useState<string>(PassportCountry.BD);
   const [ppBg, setPpBg] = useState<string>(PassportBg.WHITE);
   const [ppDress, setPpDress] = useState<string>(PassportDress.ORIGINAL);
+  const [ppCoupleDress, setPpCoupleDress] = useState<string>(CoupleDress.FORMAL);
   const [ppRetouch, setPpRetouch] = useState<boolean>(true);
 
   const [context, setContext] = useState<string>('');
@@ -116,7 +124,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [aspectRatio, setAspectRatio] = useState<string>(ImageAspectRatio.SQUARE);
   const [party, setParty] = useState<string>('');
   
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  // Change state to array to support multiple images
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,6 +140,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.EMAIL: return emailCategory;
       case ContentType.AD_COPY: return adCopyCategory;
       case ContentType.POEM: return poemCategory;
+      case ContentType.PDF_MAKER: return pdfCategory;
       case ContentType.IMAGE: return imageCategory;
       case ContentType.THUMBNAIL: return thumbnailCategory;
       case ContentType.LOGO: return logoCategory;
@@ -157,6 +167,10 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const requiresImageUpload = (type: ContentType) => {
     return [ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type);
   };
+  
+  // Allow multiple images if Passport Couple is selected
+  const allowMultipleImages = activeTab === ContentType.PASSPORT && ppDress === PassportDress.COUPLE;
+  const maxImages = allowMultipleImages ? 3 : 1;
 
   const supportsOverlayText = (type: ContentType) => {
     return [ContentType.IMAGE, ContentType.THUMBNAIL].includes(type);
@@ -166,7 +180,16 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
+        if (typeof reader.result === 'string') {
+          if (allowMultipleImages) {
+            setSelectedImages(prev => {
+              if (prev.length >= maxImages) return prev;
+              return [...prev, reader.result as string];
+            });
+          } else {
+            setSelectedImages([reader.result]);
+          }
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -177,6 +200,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     if (file) {
       processFile(file);
     }
+    // Reset value so same file can be selected again if needed
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -215,10 +240,14 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
 
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, [activeTab]);
+  }, [activeTab, allowMultipleImages, selectedImages]);
 
-  const clearImage = () => {
-    setSelectedImage(null);
+  const removeImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const clearAllImages = () => {
+    setSelectedImages([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -237,10 +266,11 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       country: ppCountry,
       bg: ppBg,
       dress: ppDress,
+      coupleDress: ppDress === PassportDress.COUPLE ? ppCoupleDress : undefined,
       aiRetouch: ppRetouch
     } : undefined;
 
-    onGenerate(activeTab, category, context, tone, length, selectedParty, finalAspectRatio, selectedImage || undefined, passportConfig, overlayText, userInstruction);
+    onGenerate(activeTab, category, context, tone, length, selectedParty, finalAspectRatio, selectedImages, passportConfig, overlayText, userInstruction);
   };
 
   const renderCategoryOptions = () => {
@@ -260,6 +290,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.EMAIL: categories = EmailCategory; currentValue = emailCategory; setter = setEmailCategory; break;
       case ContentType.AD_COPY: categories = AdCopyCategory; currentValue = adCopyCategory; setter = setAdCopyCategory; break;
       case ContentType.POEM: categories = PoemCategory; currentValue = poemCategory; setter = setPoemCategory; break;
+      case ContentType.PDF_MAKER: categories = PdfCategory; currentValue = pdfCategory; setter = setPdfCategory; break;
       case ContentType.IMAGE: categories = ImageCategory; currentValue = imageCategory; setter = setImageCategory; break;
       case ContentType.THUMBNAIL: categories = ThumbnailCategory; currentValue = thumbnailCategory; setter = setThumbnailCategory; break;
       case ContentType.LOGO: categories = LogoCategory; currentValue = logoCategory; setter = setLogoCategory; break;
@@ -291,6 +322,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.EMAIL: return "উদাহরণ: ৩ দিনের ছুটির আবেদন, চাকরির জন্য কভার লেটার...";
       case ContentType.AD_COPY: return "উদাহরণ: নতুন টি-শার্ট কালেকশন, ডিজিটাল মার্কেটিং কোর্স...";
       case ContentType.POEM: return "উদাহরণ: বর্ষাকাল নিয়ে কবিতা, ভালোবাসার ছন্দ...";
+      case ContentType.PDF_MAKER: return "উদাহরণ: আপনার যোগ্যতা, অভিজ্ঞতা ও স্কিলগুলো লিখুন (সিভির জন্য)...";
       case ContentType.IMAGE: return "উদাহরণ: একটি বিড়াল সানগ্লাস পড়ে বাইক চালাচ্ছে...";
       case ContentType.THUMBNAIL: return "উদাহরণ: 'How to make money online' বা 'গেমিং লাইভস্ট্রিম'...";
       case ContentType.LOGO: return "উদাহরণ: একটি কফি শপের লোগো, বা টেক স্টার্টআপের লোগো...";
@@ -302,7 +334,10 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   };
 
   const getImageUploadLabel = () => {
-    if (requiresImageUpload(activeTab)) return "আপনার ছবি আপলোড করুন";
+    if (requiresImageUpload(activeTab)) {
+       if (allowMultipleImages) return `আপনার ছবি আপলোড করুন (${selectedImages.length}/${maxImages})`;
+       return "আপনার ছবি আপলোড করুন";
+    }
     if (activeTab === ContentType.COMMENT) return "স্ক্রিনশট আপলোড করুন (অপশনাল)";
     return "রেফারেন্স ছবি আপলোড করুন (অপশনাল)";
   };
@@ -314,7 +349,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         setActiveTab(type);
         setOverlayText('');
         setUserInstruction('');
-        if (!supportsImageUpload(type)) clearImage();
+        if (!supportsImageUpload(type)) clearAllImages();
       }}
       className={`relative group flex flex-row items-center justify-center px-4 py-2.5 rounded-xl transition-all duration-200 font-semibold text-sm font-bangla whitespace-nowrap flex-shrink-0 ${
         activeTab === type
@@ -360,6 +395,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           <TabButton type={ContentType.SCRIPT} icon={Video} label="স্ক্রিপ্ট" />
           <TabButton type={ContentType.EMAIL} icon={Mail} label="ইমেইল" />
           <TabButton type={ContentType.AD_COPY} icon={Megaphone} label="অ্যাড" />
+          <TabButton type={ContentType.PDF_MAKER} icon={FileDown} label="PDF মেকার" />
           
           <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
           
@@ -425,6 +461,25 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
                 ))}
               </select>
             </div>
+
+            {/* Couple Specific Dress Options - Shown ONLY when 'Couple' is selected */}
+            {ppDress === PassportDress.COUPLE && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                 <label className="text-xs font-bold text-indigo-600 uppercase tracking-wider font-bangla ml-1 flex items-center gap-1">
+                  <Users size={12} />
+                  কাপল ড্রেস স্টাইল
+                </label>
+                <select
+                  value={ppCoupleDress}
+                  onChange={(e) => setPpCoupleDress(e.target.value)}
+                  className="w-full bg-indigo-50 border border-indigo-200 text-slate-800 text-sm rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 p-3"
+                >
+                  {Object.values(CoupleDress).map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="space-y-2">
                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1 flex items-center gap-1">
@@ -494,7 +549,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
               {getImageUploadLabel()}
             </label>
             
-            {!selectedImage ? (
+            {selectedImages.length === 0 ? (
               <div 
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={handleDragOver}
@@ -512,7 +567,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
                 <p className="text-sm font-semibold text-slate-600 font-bangla">
                   ছবি সিলেক্ট করতে ক্লিক করুন, ড্র্যাগ করুন অথবা পেস্ট (Ctrl+V) করুন
                 </p>
-                <p className="text-xs text-slate-400 mt-1">JPG, PNG সাপোর্টেড</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  JPG, PNG সাপোর্টেড {allowMultipleImages && `(Max 3 images)`}
+                </p>
                 <input 
                   type="file" 
                   ref={fileInputRef}
@@ -522,19 +579,41 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
                 />
               </div>
             ) : (
-              <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50 group flex items-center justify-center bg-checkered h-48">
-                <img src={selectedImage} alt="Preview" className="h-full object-contain" />
-                <button
-                  type="button"
-                  onClick={clearImage}
-                  className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-sm"
-                >
-                  <X size={16} />
-                </button>
-                <div className="absolute bottom-2 right-2 bg-green-500 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                   <CheckCircle2 size={10} />
-                   <span>রেডি</span>
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                 {/* Existing Images */}
+                 {selectedImages.map((img, idx) => (
+                    <div key={idx} className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50 group flex items-center justify-center bg-checkered h-48 animate-in fade-in zoom-in">
+                      <img src={img} alt={`Preview ${idx+1}`} className="h-full object-contain" />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(idx)}
+                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-sm"
+                      >
+                        <X size={16} />
+                      </button>
+                      <div className="absolute bottom-2 left-2 bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 shadow-sm font-bold">
+                        #{idx + 1}
+                      </div>
+                    </div>
+                 ))}
+
+                 {/* Add More Button (Only if allowed and under limit) */}
+                 {allowMultipleImages && selectedImages.length < maxImages && (
+                    <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-slate-300 rounded-xl h-48 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 hover:border-indigo-400 transition-all text-slate-400 hover:text-indigo-500"
+                    >
+                       <Plus size={32} />
+                       <span className="text-xs font-bold mt-2 font-bangla">আরও যোগ করুন</span>
+                       <input 
+                        type="file" 
+                        ref={fileInputRef}
+                        onChange={handleImageUpload} 
+                        accept="image/*" 
+                        className="hidden" 
+                      />
+                    </div>
+                 )}
               </div>
             )}
            </div>
@@ -545,6 +624,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
             {activeTab === ContentType.BIO ? "আপনার সম্পর্কে / কিওয়ার্ডস" 
              : isImageTool(activeTab) ? "অতিরিক্ত নির্দেশনা (অপশনাল)" 
+             : activeTab === ContentType.PDF_MAKER ? "বিষয়বস্তু / তথ্য (Details)"
              : "বিষয় / প্রসঙ্গ (যেমন: পোস্টটি কিসের?)"}
           </label>
           <textarea
@@ -678,7 +758,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={isLoading || (requiresImageUpload(activeTab) && !selectedImage)}
+          disabled={isLoading || (requiresImageUpload(activeTab) && selectedImages.length === 0)}
           className="relative w-full overflow-hidden group flex items-center justify-center space-x-2 text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 bg-[length:200%_auto] hover:bg-right focus:ring-4 focus:outline-none focus:ring-indigo-300 font-bold rounded-xl text-base px-6 py-4 text-center transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/40 transform active:scale-[0.99] font-bangla"
         >
           {isLoading ? (

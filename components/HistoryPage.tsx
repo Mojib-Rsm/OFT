@@ -1,7 +1,8 @@
+
 import React from 'react';
 import { HistoryItem } from '../types';
 import ResultCard from './ResultCard';
-import { Trash2, Clock, Calendar, Flag, ChevronRight, PenLine } from 'lucide-react';
+import { Trash2, Clock, Calendar, Flag, ChevronRight, PenLine, Image as ImageIcon } from 'lucide-react';
 
 interface HistoryPageProps {
   history: HistoryItem[];
@@ -69,6 +70,12 @@ const HistoryPage: React.FC<HistoryPageProps> = ({ history, onClearHistory }) =>
                     <span className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-indigo-100 bg-indigo-50 text-indigo-700 text-xs font-semibold font-bangla">
                       <Flag size={10} fill="currentColor" />
                       {item.party}
+                    </span>
+                  )}
+                  {item.inputImages && item.inputImages.length > 0 && (
+                     <span className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-200 bg-white text-slate-500 text-xs font-semibold font-bangla">
+                      <ImageIcon size={10} />
+                      {item.inputImages.length} ছবি
                     </span>
                   )}
                 </div>

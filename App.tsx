@@ -1,12 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import InputSection from './components/InputSection';
 import ResultCard from './components/ResultCard';
 import HistoryPage from './components/HistoryPage';
 import ToolGrid from './components/ToolGrid';
+import ErrorPopup from './components/ErrorPopup';
 import { ContentType, HistoryItem } from './types';
 import { generateBanglaContent, generateImage } from './services/geminiService';
-import { Sparkles, AlertCircle, RefreshCcw } from 'lucide-react';
+import { Sparkles, RefreshCcw } from 'lucide-react';
 
 const App: React.FC = () => {
   const [view, setView] = useState<'home' | 'history'>('home');
@@ -41,7 +43,7 @@ const App: React.FC = () => {
     length?: string, 
     party?: string, 
     aspectRatio?: string,
-    inputImage?: string,
+    inputImages?: string[], // Changed to array
     passportConfig?: any,
     overlayText?: string,
     userInstruction?: string
@@ -56,10 +58,10 @@ const App: React.FC = () => {
 
       // Check if it's an image tool
       if ([ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type)) {
-        generatedOptions = await generateImage(category, context, aspectRatio, inputImage, passportConfig, overlayText);
+        generatedOptions = await generateImage(category, context, aspectRatio, inputImages, passportConfig, overlayText);
       } else {
-        // Pass inputImage for multimodal text generation (e.g. Screenshot Comments)
-        generatedOptions = await generateBanglaContent(type, category, context, tone, length, party, userInstruction, inputImage);
+        // Pass inputImages for multimodal text generation (e.g. Screenshot Comments)
+        generatedOptions = await generateBanglaContent(type, category, context, tone, length, party, userInstruction, inputImages);
       }
       
       setResults(generatedOptions);
@@ -80,17 +82,28 @@ const App: React.FC = () => {
         party,
         aspectRatio,
         results: historyResults,
-        hasInputImage: !!inputImage,
+        inputImages: inputImages && inputImages.length > 0 ? inputImages : undefined, // Save raw images? Be careful with storage limits
         passportConfig,
         overlayText,
         userInstruction
       };
       
+      // Note: We are saving base64 images to history. This might exceed LocalStorage limits quickly. 
+      // Ideally, in a real app, upload these to a server and store URLs.
+      // For this demo, we might want to strip images from history if they are too large, or just keep them.
+      
       setHistory(prev => [newItem, ...prev]);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("দুঃখিত, কন্টেন্ট তৈরি করা যায়নি। দয়া করে আবার চেষ্টা করুন।");
+      // Detailed error message extraction
+      let errorMessage = "দুঃখিত, কন্টেন্ট তৈরি করা যায়নি। দয়া করে আবার চেষ্টা করুন।";
+      if (err.message) {
+         if (err.message.includes('429')) errorMessage = "সার্ভার ব্যস্ত আছে বা লিমিট শেষ হয়ে গেছে। একটু পরে আবার চেষ্টা করুন।";
+         else if (err.message.includes('SAFETY')) errorMessage = "আপনার রিকোয়েস্টটি এআই পলিসির কারণে ব্লক করা হয়েছে। দয়া করে অন্যভাবে চেষ্টা করুন।";
+         else errorMessage = err.message;
+      }
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -127,6 +140,11 @@ const App: React.FC = () => {
       <div className="fixed top-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-200/20 rounded-full blur-3xl -z-10 animate-pulse pointer-events-none"></div>
       <div className="fixed bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-200/20 rounded-full blur-3xl -z-10 animate-pulse delay-700 pointer-events-none"></div>
 
+      {/* Global Error Popup */}
+      {error && (
+        <ErrorPopup message={error} onClose={() => setError(null)} />
+      )}
+
       <Header currentView={view} onViewChange={handleViewChange} />
       
       <main className="flex-grow max-w-5xl mx-auto w-full px-4 sm:px-6 py-24 space-y-8 relative z-0">
@@ -162,19 +180,6 @@ const App: React.FC = () => {
                    onBack={handleBackToGrid}
                    key={selectedTool} // Force re-mount when tool changes
                  />
-
-                 {/* Error Message */}
-                  {error && (
-                    <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start space-x-3 animate-in fade-in slide-in-from-top-2 shadow-sm">
-                      <div className="p-2 bg-red-100 rounded-full">
-                        <AlertCircle className="text-red-600" size={20} />
-                      </div>
-                      <div>
-                        <h3 className="text-red-800 font-bold text-sm">সমস্যা হয়েছে</h3>
-                        <p className="text-red-600 text-sm mt-1">{error}</p>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Results Section */}
                   {results.length > 0 && (

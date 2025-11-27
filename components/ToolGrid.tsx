@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
   MessageSquare, 
@@ -18,7 +19,8 @@ import {
   Briefcase,
   Mail,
   Megaphone,
-  Feather
+  Feather,
+  FileDown
 } from 'lucide-react';
 import { ContentType } from '../types';
 
@@ -76,6 +78,7 @@ const ToolGrid: React.FC<ToolGridProps> = ({ onSelectTool }) => {
         { type: ContentType.EMAIL, label: 'ইমেইল / লেটার', icon: Mail, desc: 'ফরমাল ইমেইল ও আবেদন' },
         { type: ContentType.AD_COPY, label: 'বিজ্ঞাপন / অ্যাড', icon: Megaphone, desc: 'ফেসবুক অ্যাড ও মার্কেটিং' },
         { type: ContentType.SCRIPT, label: 'ভিডিও স্ক্রিপ্ট', icon: Video, desc: 'রিলস ও ভিডিওর প্ল্যান' },
+        { type: ContentType.PDF_MAKER, label: 'PDF মেকার', icon: FileDown, desc: 'সিভি, রিপোর্ট ও ডক' },
         { type: ContentType.OTHER, label: 'অন্যান্য টুলস', icon: MoreHorizontal, desc: 'এসএমএস, উইশ এবং অন্যান্য' },
       ]
     }

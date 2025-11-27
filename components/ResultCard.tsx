@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Copy, Check, Share2, CornerDownRight, Download, Image as ImageIcon, Printer, Grid, Type } from 'lucide-react';
+import { Copy, Check, Share2, CornerDownRight, Download, Image as ImageIcon, Printer, Grid, Type, FileDown } from 'lucide-react';
 
 interface ResultCardProps {
   content: string;
@@ -89,6 +90,61 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handlePdfDownload = () => {
+    // Basic Markdown to HTML conversion for bold and lines
+    const formattedHtml = displayContent
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold: **text** -> <strong>text</strong>
+      .replace(/\n/g, '<br/>'); // Newlines
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Download PDF - OFT AI</title>
+            <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+            <style>
+              body {
+                font-family: 'Hind Siliguri', sans-serif;
+                padding: 40px;
+                max-width: 800px;
+                margin: 0 auto;
+                color: #1e293b;
+                line-height: 1.6;
+              }
+              h1, h2, strong {
+                font-weight: 700;
+                color: #0f172a;
+              }
+              .content {
+                white-space: pre-wrap;
+                font-size: 14pt;
+              }
+              @media print {
+                @page { margin: 2cm; size: A4; }
+                body { padding: 0; }
+                .no-print { display: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+               <button onclick="window.print()" style="background: #4f46e5; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-family: 'Hind Siliguri';">
+                 PDF হিসেবে সেভ করুন / প্রিন্ট করুন
+               </button>
+            </div>
+            <div class="content">${formattedHtml}</div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      // Optional: Auto print after load
+      // printWindow.onload = () => printWindow.print();
+    } else {
+      alert('পপ-আপ ব্লক করা আছে। দয়া করে পপ-আপ এলাউ করুন।');
+    }
   };
 
   const handleShare = async () => {
@@ -207,9 +263,12 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
                 )}
               </div>
             ) : (
-              <p className="font-bangla text-lg text-slate-800 leading-relaxed whitespace-pre-wrap select-text selection:bg-indigo-100 selection:text-indigo-900">
-                {displayContent}
-              </p>
+              <div className="prose prose-sm max-w-none text-slate-800 font-bangla leading-relaxed whitespace-pre-wrap">
+                {/* Rudimentary markdown rendering for preview */}
+                {displayContent.split('\n').map((line, i) => (
+                  <div key={i} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                ))}
+              </div>
             )}
           </div>
           
@@ -260,6 +319,17 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
                    </button>
                  </>
                ) : (
+                 <>
+                 {/* PDF Download Button */}
+                  <button
+                    onClick={handlePdfDownload}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border border-transparent hover:border-red-200"
+                    title="PDF ডাউনলোড"
+                  >
+                    <FileDown size={14} />
+                    <span className="hidden xs:inline">PDF</span>
+                  </button>
+
                  <button
                   onClick={handleCopy}
                   className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all shadow-sm ${
@@ -271,6 +341,7 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
                   {copied ? <Check size={14} /> : <Copy size={14} />}
                   <span>{copied ? 'কপি' : 'কপি'}</span>
                 </button>
+                </>
                )}
             </div>
           </div>

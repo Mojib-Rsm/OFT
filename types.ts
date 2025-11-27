@@ -1,3 +1,4 @@
+
 export enum ContentType {
   POST = 'পোস্ট / ক্যাপশন',
   COMMENT = 'কমেন্ট / রিপ্লাই',
@@ -13,6 +14,7 @@ export enum ContentType {
   LOGO = 'লোগো মেকার',
   PASSPORT = 'পাসপোর্ট ফটো',
   BG_REMOVE = 'ব্যাকগ্রাউন্ড এডিটর',
+  PDF_MAKER = 'পিডিএফ মেকার (PDF)',
   OTHER = 'অন্যান্য'
 }
 
@@ -102,6 +104,15 @@ export enum PoemCategory {
   LYRICS = 'গানের কথা (Lyrics)'
 }
 
+export enum PdfCategory {
+  RESUME = 'সিভি / বায়োডাটা (Resume)',
+  APPLICATION = 'দরখাস্ত / আবেদনপত্র',
+  REPORT = 'রিপোর্ট / প্রতিবেদন',
+  ASSIGNMENT = 'অ্যাসাইনমেন্ট',
+  COVER_LETTER = 'কভার লেটার',
+  INVOICE = 'ইনভয়েস / মেমো'
+}
+
 export enum ImageCategory {
   REALISTIC = 'বাস্তবসম্মত (Realistic)',
   ANIME = 'অ্যানিমে (Anime)',
@@ -167,7 +178,16 @@ export enum PassportDress {
   M_SHIRT = 'সাদা শার্ট (পুরুষ)',
   W_SUIT = 'ফরমাল ব্লেজার (মহিলা)',
   W_TRADITIONAL = 'মার্জিত পোশাক (মহিলা)',
-  STUDENT = 'স্টুডেন্ট ইউনিফর্ম (সাদা)'
+  STUDENT = 'স্টুডেন্ট ইউনিফর্ম (সাদা)',
+  COUPLE = 'কাপল / দম্পতি (উভয়)'
+}
+
+export enum CoupleDress {
+  ORIGINAL = 'আসল পোশাক (Original)',
+  FORMAL = 'ফরমাল (সুট/শাড়ি/ব্লেজার)',
+  TRADITIONAL = 'ট্রেডিশনাল (পাঞ্জাবি/শাড়ি)',
+  MATCHING_WHITE = 'ম্যাচিং সাদা পোশাক',
+  CASUAL_SMART = 'স্মার্ট ক্যাজুয়াল'
 }
 
 export enum ContentLength {
@@ -203,6 +223,7 @@ export interface PassportConfig {
   country: string;
   bg: string;
   dress: string;
+  coupleDress?: string;
   aiRetouch: boolean;
 }
 
@@ -214,7 +235,7 @@ export interface GenerationRequest {
   length?: string;
   party?: string;
   aspectRatio?: string;
-  inputImage?: string;
+  inputImages?: string[]; // Changed to array
   passportConfig?: PassportConfig;
   overlayText?: string;
   userInstruction?: string;
@@ -231,7 +252,7 @@ export interface HistoryItem {
   party?: string;
   aspectRatio?: string;
   results: string[];
-  hasInputImage?: boolean;
+  inputImages?: string[]; // Changed to array
   passportConfig?: PassportConfig;
   overlayText?: string;
   userInstruction?: string;
