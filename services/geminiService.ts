@@ -195,11 +195,11 @@ export const generateBanglaContent = async (
         });
       };
 
-      // FALLBACK LOGIC: Try 2.5-flash, if 429/503/Fail, try 1.5-flash
+      // FALLBACK LOGIC: Try 2.0 Flash (New), Fallback to 1.5 Flash
       try {
-         // Priority 1: 2.5 Flash (Smarter)
-         // Only use 2.5 if NOT OCR (OCR works better on 1.5 in some cases, but user wants 1.5 fallback for limits)
-         const primaryModel = type === ContentType.IMG_TO_TEXT ? "gemini-1.5-flash" : "gemini-2.5-flash";
+         // Priority 1: 2.0 Flash (Primary Text Model)
+         // Only use 2.0 if NOT OCR (OCR works better on 1.5 in some cases, but user wants 1.5 fallback for limits)
+         const primaryModel = type === ContentType.IMG_TO_TEXT ? "gemini-1.5-flash" : "gemini-2.0-flash";
          const response = await callApi(primaryModel);
          const jsonText = response.text;
          if (!jsonText) throw new Error("Empty response");
@@ -210,8 +210,8 @@ export const generateBanglaContent = async (
          // Check if error is related to quota or server overload
          const isQuotaError = err.message && (err.message.includes('429') || err.message.includes('503') || err.message.includes('quota') || err.message.includes('RESOURCE_EXHAUSTED'));
          
-         if (isQuotaError && type !== ContentType.IMG_TO_TEXT) {
-            console.warn("Gemini 2.5 Flash hit quota/error. Waiting 1s then falling back to Gemini 1.5 Flash.");
+         if (isQuotaError || err.message.includes('not found')) { // Also catch if model name is wrong/not found
+            console.warn(`Primary model failed (${err.message}). Waiting 1s then falling back to Gemini 1.5 Flash.`);
             // Wait 1 second before retry to clear loose rate limits
             await delay(1000);
             
@@ -222,7 +222,7 @@ export const generateBanglaContent = async (
             const parsed = JSON.parse(jsonText);
             return parsed.options || [];
          } else {
-            throw err; // Re-throw if it's not a quota error or if we are already on the fallback model
+            throw err; 
          }
       }
     });
@@ -266,144 +266,171 @@ export const generateImage = async (
   overlayText?: string
 ): Promise<string[]> => {
   
-  let fullPrompt = "";
-  const parts: any[] = [];
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
+  const isEditing = inputImages && inputImages.length > 0;
 
-  // Logic for different image tools
-  if (inputImages && inputImages.length > 0) {
-    // EDITING MODE (Passport, BG Remove)
-    inputImages.forEach(img => {
-       const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
-       const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/png';
-       const base64Data = img.replace(/^data:(.*?);base64,/, '');
-       
-       parts.push({
-         inlineData: { data: base64Data, mimeType: mimeType }
-       });
-    });
+  // ------------------------------------------------------------------
+  // SCENARIO 1: IMAGE EDITING (Passport, Background Remove, Uploads)
+  // Use 'gemini-2.5-flash-preview-image' via generateContent
+  // ------------------------------------------------------------------
+  if (isEditing) {
+      let fullPrompt = "";
+      const parts: any[] = [];
+      
+      inputImages.forEach(img => {
+         const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
+         const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/png';
+         const base64Data = img.replace(/^data:(.*?);base64,/, '');
+         
+         parts.push({
+           inlineData: { data: base64Data, mimeType: mimeType }
+         });
+      });
 
-    if (passportConfig) {
-       const dressInstruction = passportConfig.dress.includes('আসল') 
-         ? 'Ensure clothing looks neat.' 
-         : `Change outfit to ${getDressDescription(passportConfig.dress, passportConfig.coupleDress)}.`;
+      if (passportConfig) {
+         const dressInstruction = passportConfig.dress.includes('আসল') 
+           ? 'Ensure clothing looks neat.' 
+           : `Change outfit to ${getDressDescription(passportConfig.dress, passportConfig.coupleDress)}.`;
 
-       const bgInstruction = passportConfig.bg.includes('অফিস') 
-         ? 'Change background to a blurred professional office.' 
-         : `Change background to solid ${passportConfig.bg.split(' ')[0]} color.`;
+         const bgInstruction = passportConfig.bg.includes('অফিস') 
+           ? 'Change background to a blurred professional office.' 
+           : `Change background to solid ${passportConfig.bg.split(' ')[0]} color.`;
 
-       const isCouple = passportConfig.dress.includes('Couple') || passportConfig.dress.includes('কাপল');
-       
-       let identityInstruction = isCouple ? 'faces of the people' : 'face';
-       if (isCouple && inputImages.length > 1) {
-          identityInstruction = "faces of the people from the provided source images (Combine them if needed)";
-       }
+         const isCouple = passportConfig.dress.includes('Couple') || passportConfig.dress.includes('কাপল');
+         
+         let identityInstruction = isCouple ? 'faces of the people' : 'face';
+         if (isCouple && inputImages.length > 1) {
+            identityInstruction = "faces of the people from the provided source images (Combine them if needed)";
+         }
 
-       fullPrompt = `GENERATE a professional passport photo based on the provided image(s).
-       STRICT INSTRUCTIONS:
-       1. IDENTITY: Keep the ${identityInstruction} exactly the same.
-       2. CLOTHING: ${dressInstruction}
-       3. BACKGROUND: ${bgInstruction}
-       4. LIGHTING: Even studio lighting.
-       5. ALIGNMENT: Center ${isCouple ? 'heads' : 'head'}, show shoulders.
-       ${passportConfig.country.includes('BD') ? 'Format: Bangladesh Passport standard.' : ''}
-       ${inputImages.length > 1 ? 'MERGE/COMPOSE the subjects from the input images into a single professional frame.' : ''}
-       `;
-    } else if (category.includes('Background') || category.includes('ব্যাকগ্রাউন্ড')) {
-       fullPrompt = `Edit this image. ${promptText ? promptText : 'Change the background'}. 
-       Style: ${category}. Keep the main subject intact.`;
-    } else {
-       fullPrompt = `Edit this image based on the following instruction: ${promptText || category}.`;
-    }
-  } else {
-    // GENERATION MODE
-    const textOverlayInstruction = overlayText ? "IMPORTANT: Do NOT write any text on the image. Leave negative space or clean areas where text can be added later by the user." : "";
+         fullPrompt = `GENERATE a professional passport photo based on the provided image(s).
+         STRICT INSTRUCTIONS:
+         1. IDENTITY: Keep the ${identityInstruction} exactly the same.
+         2. CLOTHING: ${dressInstruction}
+         3. BACKGROUND: ${bgInstruction}
+         4. LIGHTING: Even studio lighting.
+         5. ALIGNMENT: Center ${isCouple ? 'heads' : 'head'}, show shoulders.
+         ${passportConfig.country.includes('BD') ? 'Format: Bangladesh Passport standard.' : ''}
+         ${inputImages.length > 1 ? 'MERGE/COMPOSE the subjects from the input images into a single professional frame.' : ''}
+         `;
+      } else if (category.includes('Background') || category.includes('ব্যাকগ্রাউন্ড')) {
+         fullPrompt = `Edit this image. ${promptText ? promptText : 'Change the background'}. 
+         Style: ${category}. Keep the main subject intact.`;
+      } else {
+         fullPrompt = `Edit this image based on the following instruction: ${promptText || category}.`;
+      }
+      
+      fullPrompt += "\nReturn ONLY the generated image. Do not provide any text description or conversational response.";
+      parts.push({ text: fullPrompt });
 
-    if (category.includes('Thumbnail') || category.includes('থাম্বনেইল')) {
-      fullPrompt = `Create a high CTR YouTube/Facebook thumbnail background.
-      Topic: ${promptText}. Style: ${category}.
-      Vibrant colors, catchy composition.
-      ${textOverlayInstruction}`;
-    } else if (category.includes('Logo') || category.includes('লোগো')) {
-      fullPrompt = `Design a professional logo.
-      Brand/Concept: ${promptText}. Style: ${category}.
-      Vector art style, simple, iconic, minimalist, white background.
-      ${textOverlayInstruction}`;
-    } else {
-      fullPrompt = `Generate a high quality ${category} style image. 
-      Subject/Description: ${promptText || 'A creative artistic composition'}.
-      High resolution, detailed, cinematic lighting.
-      ${textOverlayInstruction}`;
-    }
+      return await makeGeminiRequest(async (ai) => {
+         // Using gemini-2.5-flash-preview-image for editing tasks
+         const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-preview-image',
+            contents: { parts: parts },
+            config: {
+              imageConfig: { aspectRatio: finalAspectRatio as any },
+              safetySettings: SAFETY_SETTINGS as any
+            },
+         });
+         
+         const generatedImages: string[] = [];
+         let textOutput = "";
+
+         if (response.candidates && response.candidates[0]) {
+            if (response.candidates[0].content && response.candidates[0].content.parts) {
+               for (const part of response.candidates[0].content.parts) {
+                  if (part.inlineData) {
+                     generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+                  } else if (part.text) {
+                     textOutput += part.text;
+                  }
+               }
+            }
+         }
+
+         if (generatedImages.length === 0) {
+            if (textOutput) throw new Error(`AI Response: ${textOutput.substring(0, 250)}`);
+            throw new Error("No image generated by Gemini 2.5 Flash.");
+         }
+         return generatedImages;
+      });
   }
 
-  // FORCE IMAGE OUTPUT
-  fullPrompt += "\nReturn ONLY the generated image. Do not provide any text description or conversational response.";
-  
-  parts.push({ text: fullPrompt });
+  // ------------------------------------------------------------------
+  // SCENARIO 2: IMAGE CREATION (Text to Image)
+  // Try 'imagen-4.0-fast-generate' first, fallback to 'gemini-2.5-flash-preview-image'
+  // ------------------------------------------------------------------
+  else {
+      let prompt = "";
+      const textOverlayInstruction = overlayText ? "IMPORTANT: Do NOT write any text on the image. Leave negative space or clean areas where text can be added later by the user." : "";
 
-  // 1. Try Gemini Image Generation
-  return await makeGeminiRequest(async (ai) => {
-    // Retry Loop for Image Generation
-    let lastError: any = null;
-    const maxRetries = 2; // Try twice
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        if (attempt > 0) {
-           console.log(`Image generation attempt ${attempt + 1}/${maxRetries}...`);
-           await delay(2000); // Wait 2s before retry
-        }
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: { parts: parts },
-          config: {
-            imageConfig: { aspectRatio: finalAspectRatio as any },
-            safetySettings: SAFETY_SETTINGS as any // Apply safety settings to prevent blocking valid edits
-          },
-        });
-
-        const generatedImages: string[] = [];
-        let textOutput = "";
-
-        if (response.candidates && response.candidates[0]) {
-          // If finishReason is SAFETY, we still check content, but we try to avoid throwing immediately if blocked
-          if (response.candidates[0].finishReason === 'SAFETY') {
-               // We configured BLOCK_NONE, so this should happen less.
-               // But if it does, we throw a specific error.
-               throw new Error("Generation blocked by safety settings (e.g. face policy). Try a different image or description.");
-          }
-
-          if (response.candidates[0].content && response.candidates[0].content.parts) {
-            for (const part of response.candidates[0].content.parts) {
-              if (part.inlineData) {
-                const base64EncodeString = part.inlineData.data;
-                generatedImages.push(`data:${part.inlineData.mimeType};base64,${base64EncodeString}`);
-              } else if (part.text) {
-                textOutput += part.text;
-              }
-            }
-          }
-        }
-
-        if (generatedImages.length === 0) {
-          if (textOutput) throw new Error(`AI Response: ${textOutput.substring(0, 250)}`);
-          throw new Error("No image generated by Gemini.");
-        }
-
-        return generatedImages;
-
-      } catch (err: any) {
-        lastError = err;
-        const isQuotaError = err.message && (err.message.includes('429') || err.message.includes('503') || err.message.includes('RESOURCE_EXHAUSTED'));
-        // If it's NOT a quota error (e.g., bad request), don't retry, just fail
-        if (!isQuotaError && attempt === 0) throw err;
-        
-        // If it is quota error, loop continues
-        if (attempt === maxRetries - 1) throw lastError;
+      if (category.includes('Thumbnail') || category.includes('থাম্বনেইল')) {
+        prompt = `Create a high CTR YouTube/Facebook thumbnail background.
+        Topic: ${promptText}. Style: ${category}.
+        Vibrant colors, catchy composition.
+        ${textOverlayInstruction}`;
+      } else if (category.includes('Logo') || category.includes('লোগো')) {
+        prompt = `Design a professional logo.
+        Brand/Concept: ${promptText}. Style: ${category}.
+        Vector art style, simple, iconic, minimalist, white background.
+        ${textOverlayInstruction}`;
+      } else {
+        prompt = `Generate a high quality ${category} style image. 
+        Subject/Description: ${promptText || 'A creative artistic composition'}.
+        High resolution, detailed, cinematic lighting.
+        ${textOverlayInstruction}`;
       }
-    }
-    throw lastError;
-  });
+
+      return await makeGeminiRequest(async (ai) => {
+         // ATTEMPT 1: Imagen 4.0 Fast
+         try {
+             // console.log("Trying Imagen 4.0 Fast...");
+             const response = await ai.models.generateImages({
+                 model: 'imagen-4.0-fast-generate',
+                 prompt: prompt,
+                 config: {
+                    numberOfImages: 1,
+                    aspectRatio: finalAspectRatio as any // e.g. "1:1"
+                 }
+             });
+             
+             if (response.generatedImages && response.generatedImages.length > 0) {
+                 const base64 = response.generatedImages[0].image.imageBytes;
+                 // Imagen usually returns JPEG/PNG but let's assume PNG or detect header if needed
+                 // The SDK often returns raw bytes, we need base64 string
+                 return [`data:image/png;base64,${base64}`];
+             }
+             throw new Error("Imagen returned no images.");
+
+         } catch (imagenError: any) {
+             console.warn("Imagen 4.0 failed, falling back to Gemini 2.5 Flash Image.", imagenError.message);
+             // ATTEMPT 2: Fallback to Gemini 2.5 Flash Image
+             
+             const parts = [{ text: prompt }];
+             const response = await ai.models.generateContent({
+                 model: 'gemini-2.5-flash-preview-image',
+                 contents: { parts: parts },
+                 config: {
+                    imageConfig: { aspectRatio: finalAspectRatio as any },
+                    safetySettings: SAFETY_SETTINGS as any
+                 },
+             });
+
+             const generatedImages: string[] = [];
+             if (response.candidates?.[0]?.content?.parts) {
+                for (const part of response.candidates[0].content.parts) {
+                   if (part.inlineData) {
+                      generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+                   }
+                }
+             }
+
+             if (generatedImages.length === 0) {
+                throw new Error("Failed to generate image with both Imagen and Gemini models.");
+             }
+             return generatedImages;
+         }
+      });
+  }
 };
