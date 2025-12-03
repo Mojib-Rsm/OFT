@@ -1,6 +1,4 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import OpenAI from "openai";
 import { ContentType, PassportConfig } from "../types";
 
 // --- ENVIRONMENT VARIABLE HANDLING ---
@@ -28,16 +26,14 @@ const API_KEYS = [
   singleGeminiKey
 ].filter((key, index, self) => !!key && key.length > 0 && self.indexOf(key) === index); // Unique & non-empty
 
-// Load OpenAI Key from .env
-const openaiApiKey = getEnvVar("VITE_OPENAI_API_KEY") || getEnvVar("OPENAI_API_KEY");
-
-// Initialize OpenAI Client
-// Note: In a real production app, calls to OpenAI should go through a backend to hide the key.
-// For this client-side demo, we use dangerouslyAllowBrowser: true.
-const openai = new OpenAI({
-  apiKey: openaiApiKey, 
-  dangerouslyAllowBrowser: true
-});
+// Safety Settings to prevent blocking on harmless edits (like passport photos)
+const SAFETY_SETTINGS = [
+  { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' }
+];
 
 // Helper function to execute API calls with rotation/failover logic for Gemini
 const makeGeminiRequest = async <T>(
@@ -62,84 +58,6 @@ const makeGeminiRequest = async <T>(
   }
 
   throw lastError || new Error("All Gemini API keys failed.");
-};
-
-// --- OPENAI FALLBACK FUNCTIONS ---
-
-const generateOpenAIText = async (
-  systemPrompt: string,
-  userPrompt: string,
-  inputImageBase64?: string
-): Promise<string[]> => {
-  try {
-    if (!openaiApiKey) {
-      throw new Error("OpenAI API Key not found.");
-    }
-
-    const messages: any[] = [
-      { role: "system", content: systemPrompt }
-    ];
-
-    if (inputImageBase64) {
-      // Multimodal request (GPT-4o)
-      messages.push({
-        role: "user",
-        content: [
-          { type: "text", text: userPrompt },
-          { 
-            type: "image_url", 
-            image_url: { url: inputImageBase64 } // Base64 must contain data URI prefix
-          }
-        ]
-      });
-    } else {
-      messages.push({ role: "user", content: userPrompt });
-    }
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Cost effective and smart
-      messages: messages,
-      response_format: { type: "json_object" }, // Force JSON output
-    });
-
-    const content = completion.choices[0].message.content;
-    if (!content) return [];
-    
-    const parsed = JSON.parse(content);
-    return parsed.options || [];
-
-  } catch (error) {
-    console.error("OpenAI Text Generation Error:", error);
-    throw error;
-  }
-};
-
-const generateOpenAIImage = async (
-  prompt: string,
-  size: "1024x1024" | "1024x1792" = "1024x1024"
-): Promise<string[]> => {
-  try {
-    if (!openaiApiKey) {
-      throw new Error("OpenAI API Key not found.");
-    }
-
-    const response = await openai.images.generate({
-      model: "dall-e-3",
-      prompt: prompt,
-      n: 1,
-      size: size,
-      response_format: "b64_json",
-      quality: "standard",
-    });
-
-    if (response.data && response.data.length > 0) {
-      return response.data.map(img => `data:image/png;base64,${img.b64_json}`);
-    }
-    return [];
-  } catch (error) {
-    console.error("OpenAI Image Generation Error:", error);
-    throw error;
-  }
 };
 
 // --- MAIN SERVICE FUNCTIONS ---
@@ -226,9 +144,9 @@ export const generateBanglaContent = async (
       `;
   }
 
-  // 1. Try Gemini First
+  // 1. Try Gemini
   try {
-    const modelId = "gemini-2.5-flash"; 
+    const modelId = type === ContentType.IMG_TO_TEXT ? "gemini-1.5-flash" : "gemini-2.5-flash";
     
     return await makeGeminiRequest(async (ai) => {
       let contents: any[] = [];
@@ -276,17 +194,8 @@ export const generateBanglaContent = async (
     });
 
   } catch (geminiError) {
-    console.warn("Gemini generation failed, switching to ChatGPT...", geminiError);
-    
-    // 2. Fallback to OpenAI
-    try {
-      // OpenAI fallback currently supports only one image in this simple implementation
-      // Use the first image if available
-      return await generateOpenAIText(systemInstruction, prompt, inputImages ? inputImages[0] : undefined);
-    } catch (openaiError) {
-      console.error("Both Gemini and OpenAI failed.");
-      throw new Error("Unable to generate content. Please check your connection or quota.");
-    }
+    console.error("Gemini generation failed.", geminiError);
+    throw geminiError;
   }
 };
 
@@ -406,7 +315,8 @@ export const generateImage = async (
         model: 'gemini-2.5-flash-image',
         contents: { parts: parts },
         config: {
-          imageConfig: { aspectRatio: finalAspectRatio as any }
+          imageConfig: { aspectRatio: finalAspectRatio as any },
+          safetySettings: SAFETY_SETTINGS as any // Apply safety settings to prevent blocking valid edits
         },
       });
 
@@ -414,8 +324,12 @@ export const generateImage = async (
       let textOutput = "";
 
       if (response.candidates && response.candidates[0]) {
+        // If finishReason is SAFETY, we still check content, but we try to avoid throwing immediately if blocked
+        // However, usually blocked means no content.
         if (response.candidates[0].finishReason === 'SAFETY') {
-          throw new Error("Generation blocked by safety settings.");
+             // We configured BLOCK_NONE, so this should happen less.
+             // But if it does, we throw a specific error.
+             throw new Error("Generation blocked by safety settings (e.g. face policy). Try a different image or description.");
         }
 
         if (response.candidates[0].content && response.candidates[0].content.parts) {
@@ -439,24 +353,7 @@ export const generateImage = async (
     });
 
   } catch (geminiError) {
-    console.warn("Gemini Image Gen failed, switching to OpenAI (DALL-E)...", geminiError);
-    
-    // 2. Fallback to OpenAI (DALL-E)
-    if (!inputImages || inputImages.length === 0) {
-      try {
-        // Map Aspect Ratio to DALL-E 3 supported sizes
-        let size: "1024x1024" | "1024x1792" = "1024x1024";
-        if (finalAspectRatio === '16:9' || finalAspectRatio === '9:16' || finalAspectRatio === '3:4') {
-            size = "1024x1792"; 
-        }
-        
-        return await generateOpenAIImage(fullPrompt, size);
-      } catch (openaiError) {
-        console.error("OpenAI Image Gen failed.");
-        throw new Error("Image generation failed on both providers.");
-      }
-    } else {
-        throw new Error("Image Editing/Composition with input images failed on Gemini. OpenAI fallback for editing is not currently supported.");
-    }
+    console.error("Gemini Image Gen failed.", geminiError);
+    throw geminiError;
   }
 };
