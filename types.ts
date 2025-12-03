@@ -215,6 +215,12 @@ export enum ContentTone {
   ANGRY = 'রাগান্বিত / সিরিয়াস'
 }
 
+export enum ContentLanguage {
+  BANGLA = 'বাংলা (Bangla)',
+  ENGLISH = 'ইংরেজি (English)',
+  BANGLISH = 'বাংলিশ (Banglish)'
+}
+
 export enum ImageAspectRatio {
   SQUARE = '1:1',
   LANDSCAPE = '16:9',
@@ -244,10 +250,11 @@ export interface GenerationRequest {
   length?: string;
   party?: string;
   aspectRatio?: string;
-  inputImages?: string[]; // Changed to array
+  inputImages?: string[]; 
   passportConfig?: PassportConfig;
   overlayText?: string;
   userInstruction?: string;
+  language?: string;
 }
 
 export interface HistoryItem {
@@ -261,8 +268,9 @@ export interface HistoryItem {
   party?: string;
   aspectRatio?: string;
   results: string[];
-  inputImages?: string[]; // Changed to array
+  inputImages?: string[];
   passportConfig?: PassportConfig;
   overlayText?: string;
   userInstruction?: string;
+  language?: string;
 }

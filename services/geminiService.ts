@@ -1,35 +1,30 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { ContentType, PassportConfig } from "../types";
+import { ContentType, PassportConfig, ContentLanguage } from "../types";
 
 // --- ENVIRONMENT VARIABLE HANDLING ---
 
-// Helper to safely get env vars in Vite/Standard environments
 const getEnvVar = (key: string): string => {
-  // Check import.meta.env (Vite standard)
   if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
     return (import.meta as any).env[key];
   }
-  // Check process.env (Node/Compat)
   if (typeof process !== 'undefined' && process.env && process.env[key]) {
     return process.env[key];
   }
   return "";
 };
 
-// Load Gemini Keys from .env
-// Supports comma-separated list in VITE_GEMINI_API_KEYS for rotation
 const envGeminiKeys = getEnvVar("VITE_GEMINI_API_KEYS") || getEnvVar("GEMINI_API_KEYS") || "";
 const singleGeminiKey = getEnvVar("VITE_API_KEY") || getEnvVar("API_KEY");
 
 const API_KEYS = [
   ...envGeminiKeys.split(',').map(k => k.trim()),
   singleGeminiKey
-].filter((key, index, self) => !!key && key.length > 0 && self.indexOf(key) === index); // Unique & non-empty
+].filter((key, index, self) => !!key && key.length > 0 && self.indexOf(key) === index);
 
 console.log(`Loaded ${API_KEYS.length} API Keys for rotation.`);
 
-// Safety Settings to prevent blocking on harmless edits (like passport photos)
+// Safety Settings
 const SAFETY_SETTINGS = [
   { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
   { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
@@ -38,7 +33,7 @@ const SAFETY_SETTINGS = [
   { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' }
 ];
 
-// Helper for delay (backoff strategy)
+// Delay helper
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Helper function to execute API calls with rotation/failover logic for Gemini
@@ -46,7 +41,6 @@ const makeGeminiRequest = async <T>(
   operation: (ai: GoogleGenAI) => Promise<T>
 ): Promise<T> => {
   if (API_KEYS.length === 0) {
-    console.error("No Gemini API Keys found in environment variables (.env)");
     throw new Error("Gemini API Key is missing. Please check your .env file.");
   }
 
@@ -57,8 +51,7 @@ const makeGeminiRequest = async <T>(
       const ai = new GoogleGenAI({ apiKey });
       return await operation(ai);
     } catch (error: any) {
-      console.warn(`Gemini API Key ending in ...${apiKey.slice(-4)} failed. Trying next key.`);
-      if (error.message) console.warn(`Error details: ${error.message}`);
+      console.warn(`Key ...${apiKey.slice(-4)} failed: ${error.message}. Switching key...`);
       lastError = error;
       continue;
     }
@@ -77,12 +70,15 @@ export const generateBanglaContent = async (
   length?: string,
   party?: string,
   userInstruction?: string,
-  inputImages?: string[]
+  inputImages?: string[],
+  language: string = ContentLanguage.BANGLA
 ): Promise<string[]> => {
   
+  const targetLanguage = language === ContentLanguage.ENGLISH ? "English" : "Bengali (Bangla script)";
+  
   const systemInstruction = `
-    You are a witty, culturally aware Bengali social media expert and creative writer. 
-    Your goal is to generate engaging, relevant, and human-like content for Facebook/Instagram in Bengali (Bangla script).
+    You are a witty, culturally aware social media expert and creative writer. 
+    Your goal is to generate engaging, relevant content in ${targetLanguage}.
     
     Content Types & Styles:
     1. Posts/Captions: Engaging, varied length, use emojis.
@@ -96,18 +92,17 @@ export const generateBanglaContent = async (
     9. Poems: Rhythmic, artistic, stanza-based structure.
     10. PDF Maker: Structured professional documents (CV, Report, Application). USE MARKDOWN for formatting: use **bold** for headings/key terms, and use newlines for spacing.
     11. Image To Text (OCR): Act as a precise Optical Character Recognition (OCR) scanner. Extract text verbatim from images. Maintain original paragraphs and lists. Support both Bengali and English in the same document.
-    12. Others: Formal or informal messages based on the specific category (SMS, Birthday, etc.).
 
     Guidelines:
-    - Use authentic informal Bengali (colloquial/internet slang mixed with standard Bangla where appropriate).
+    - If Language is Bengali, use authentic informal Bengali (colloquial/internet slang mixed with standard Bangla where appropriate).
+    - If Language is English, use standard or casual English based on tone.
     - Use relevant emojis to make the content lively.
-    - Avoid direct translations; use cultural nuances.
-    - For Political Comments: Be persuasive, logical, or critical based on whether it is Support or Oppose. Use strong vocabulary appropriate for political discourse.
+    - For Political Comments: Be persuasive, logical, or critical based on whether it is Support or Oppose.
     - STRICTLY output JSON with a property "options" containing an array of strings.
   `;
 
   let prompt = `
-    Generate 5 distinct options for a ${type} in Bengali based on the following details:
+    Generate 5 distinct options for a ${type} in ${targetLanguage} based on the following details:
     - Category: ${category}
     - Context/Topic: ${context || 'General/Random'}
     ${party ? `- Target Political Party/Group: ${party}` : ''}
@@ -117,119 +112,98 @@ export const generateBanglaContent = async (
     ${inputImages && inputImages.length > 0 ? `- Attached Image(s): This is a screenshot/image. Read any text visible in it and analyze the visual context to generate relevant comments.` : ''}
     
     Specific Instructions:
-    - If Bio: Make them look aesthetic (e.g., using "Official Account | Dreamer" style or poetic lines).
+    - If Bio: Make them look aesthetic.
     - If Story/Note: Keep it bite-sized. Notes MUST be very short (under 60 chars).
     - If Script: Provide a structured format (Hook, Scene, Dialogue).
     - If Email: Include "Subject:" at the top, then the body.
     - If Ad Copy: Use "Headline:", "Body:", "CTA:" structure.
-    - If Poem: Use artistic rhyming and stanzas.
     - If PDF Maker: Create a structured document. Use **Bold** for titles and important labels. Ensure proper spacing (newlines) between sections.
-    - If Advanced Tone is 'Sarcastic', be witty and edgy.
-    - If Advanced Tone is 'Professional', use proper standard Bangla (Shuddho).
-    - If a Political Party is specified, ensure the content specifically targets that party based on the category (e.g., if category is Support, praise them; if Oppose, criticize them).
-    - **CRITICAL:** If "Specific User Instruction" is provided, ensure the generated content specifically mentions or addresses that point, while maintaining the style of the Category.
-    - **IMAGE ANALYSIS:** If an image is provided, your generated comments MUST be relevant to the text/content shown in the image.
+    - **CRITICAL:** If "Specific User Instruction" is provided, ensure the generated content specifically mentions or addresses that point.
     
     Return a JSON object with a single property 'options' which is an array of strings.
   `;
 
-  // SPECIAL PROMPT FOR IMAGE TO TEXT (OCR)
   if (type === ContentType.IMG_TO_TEXT) {
       prompt = `
-      Act as a highly accurate OCR (Optical Character Recognition) tool for Bengali and English text.
-      
-      Task:
-      1. Analyze the attached image(s) and extract ALL visible text.
-      2. Fix any potential spelling errors caused by image noise, especially in complex Bangla conjuncts (যুক্তবর্ণ).
-      3. Maintain the original formatting structure (paragraphs, lists, newlines) as closely as possible.
-      4. If it's handwritten and hard to read, infer the most logical text based on context.
-      5. Do NOT summarize. Provide the full extracted text.
-      6. If the image contains a table, try to format it with dashes or spacing.
-      
-      Output:
+      Act as a highly accurate OCR (Optical Character Recognition) tool.
+      Task: Analyze the attached image(s) and extract ALL visible text.
+      Fix potential spelling errors caused by image noise.
+      Maintain original formatting.
       Return a JSON object with property "options" containing an array with ONE string: the full extracted text.
       `;
   }
 
-  // 1. Try Gemini with Model Fallback Strategy
-  try {
-    return await makeGeminiRequest(async (ai) => {
-      let contents: any[] = [];
-      
-      if (inputImages && inputImages.length > 0) {
-        inputImages.forEach(img => {
-           const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
-           const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
-           const base64Data = img.replace(/^data:(.*?);base64,/, '');
-           
-           contents.push({
-             inlineData: {
-               mimeType: mimeType,
-               data: base64Data
-             }
-           });
-        });
-      }
-      
-      contents.push({ text: prompt });
+  return await makeGeminiRequest(async (ai) => {
+    let contents: any[] = [];
+    
+    if (inputImages && inputImages.length > 0) {
+      inputImages.forEach(img => {
+         const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
+         const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
+         const base64Data = img.replace(/^data:(.*?);base64,/, '');
+         contents.push({ inlineData: { mimeType, data: base64Data } });
+      });
+    }
+    
+    contents.push({ text: prompt });
 
-      // INTERNAL FUNCTION TO CALL API
-      const callApi = async (modelName: string) => {
-        return await ai.models.generateContent({
-          model: modelName,
-          contents: contents,
-          config: {
-            systemInstruction: systemInstruction,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                options: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING }
-                }
-              }
+    const callApi = async (modelName: string) => {
+      return await ai.models.generateContent({
+        model: modelName,
+        contents: contents,
+        config: {
+          systemInstruction: systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              options: { type: Type.ARRAY, items: { type: Type.STRING } }
             }
           }
-        });
-      };
+        }
+      });
+    };
 
-      // FALLBACK LOGIC: 1.5 Flash (Stable) -> 1.5 Pro (Powerful)
-      try {
-         // Priority 1: 1.5 Flash (Fastest, Most Stable Public Model)
-         const response = await callApi("gemini-1.5-flash");
-         const jsonText = response.text;
-         if (!jsonText) throw new Error("Empty response");
-         const parsed = JSON.parse(jsonText);
-         return parsed.options || [];
+    // --- ROBUST FALLBACK SYSTEM ---
+    try {
+       // Primary: 2.0 Flash (Fast & Capable)
+       const response = await callApi("gemini-2.0-flash");
+       const jsonText = response.text;
+       if (!jsonText) throw new Error("Empty response from 2.0 Flash");
+       const parsed = JSON.parse(jsonText);
+       return parsed.options || [];
+    } catch (err: any) {
+       console.warn(`Primary model (2.0 Flash) failed: ${err.message}. Waiting 1s before retry...`);
+       await delay(1000);
 
-      } catch (err: any) {
-         console.warn(`Primary model (gemini-1.5-flash) failed: ${err.message}. Retrying with Pro...`);
-         await delay(1000);
+       try {
+          // Secondary: 1.5 Flash (Most Stable)
+          const response = await callApi("gemini-1.5-flash");
+          const jsonText = response.text;
+          if (!jsonText) throw new Error("Empty response from 1.5 Flash");
+          const parsed = JSON.parse(jsonText);
+          return parsed.options || [];
+       } catch (err2: any) {
+           console.warn(`Secondary model (1.5 Flash) failed: ${err2.message}. Waiting 2s before retry with Pro...`);
+           await delay(2000);
 
-         try {
-            // Priority 2: 1.5 Pro (Better reasoning, separate quota)
-            const response = await callApi("gemini-1.5-pro");
-            const jsonText = response.text;
-            if (!jsonText) throw new Error("Empty response");
-            const parsed = JSON.parse(jsonText);
-            return parsed.options || [];
-         } catch (err2: any) {
-             console.warn(`Secondary model (gemini-1.5-pro) failed: ${err2.message}.`);
-             throw err2;
-         }
-      }
-    });
-
-  } catch (geminiError) {
-    console.error("Gemini generation failed.", geminiError);
-    throw geminiError;
-  }
+           try {
+               // Tertiary: 1.5 Pro (Powerful, Separate Quota)
+               const response = await callApi("gemini-1.5-pro");
+               const jsonText = response.text;
+               if (!jsonText) throw new Error("Empty response from 1.5 Pro");
+               const parsed = JSON.parse(jsonText);
+               return parsed.options || [];
+           } catch (err3: any) {
+               console.error("All models failed.");
+               throw err3;
+           }
+       }
+    }
+  });
 };
 
-// Helper function to map UI dress options to detailed English prompts for the AI
 const getDressDescription = (dressType: string, coupleDress?: string): string => {
-  // Couple Logic
   if (dressType.includes('কাপল') || dressType.includes('Couple')) {
      if (coupleDress) {
         if (coupleDress.includes('Original') || coupleDress.includes('আসল')) return "their original clothing, ensuring it looks neat, clean and professional";
@@ -241,7 +215,6 @@ const getDressDescription = (dressType: string, coupleDress?: string): string =>
      return "matching formal professional attire for both persons";
   }
 
-  // Single Logic
   if (dressType.includes('সুট')) return "a professional dark navy blue business suit with a white shirt and a silk tie";
   if (dressType.includes('সাদা শার্ট')) return "a crisp, clean white formal button-down shirt";
   if (dressType.includes('ব্লেজার')) return "a formal black blazer worn over a professional blouse";
@@ -255,7 +228,7 @@ export const generateImage = async (
   category: string,
   promptText: string,
   aspectRatio: string = "1:1",
-  inputImages?: string[], // Changed to array
+  inputImages?: string[],
   passportConfig?: PassportConfig,
   overlayText?: string
 ): Promise<string[]> => {
@@ -263,10 +236,7 @@ export const generateImage = async (
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
   const isEditing = inputImages && inputImages.length > 0;
 
-  // ------------------------------------------------------------------
-  // SCENARIO 1: IMAGE EDITING (Passport, Background Remove, Uploads)
-  // Use 'gemini-1.5-pro' (Best stable multimodal editing)
-  // ------------------------------------------------------------------
+  // SCENARIO 1: EDITING (Passport, Bg Remove) -> Use 2.0 Flash or 1.5 Pro
   if (isEditing) {
       let fullPrompt = "";
       const parts: any[] = [];
@@ -275,10 +245,7 @@ export const generateImage = async (
          const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
          const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/png';
          const base64Data = img.replace(/^data:(.*?);base64,/, '');
-         
-         parts.push({
-           inlineData: { data: base64Data, mimeType: mimeType }
-         });
+         parts.push({ inlineData: { data: base64Data, mimeType: mimeType } });
       });
 
       if (passportConfig) {
@@ -291,142 +258,94 @@ export const generateImage = async (
            : `Change background to solid ${passportConfig.bg.split(' ')[0]} color.`;
 
          const isCouple = passportConfig.dress.includes('Couple') || passportConfig.dress.includes('কাপল');
-         
          let identityInstruction = isCouple ? 'faces of the people' : 'face';
          if (isCouple && inputImages.length > 1) {
             identityInstruction = "faces of the people from the provided source images (Combine them if needed)";
          }
 
-         fullPrompt = `GENERATE a professional passport photo based on the provided image(s).
-         STRICT INSTRUCTIONS:
-         1. IDENTITY: Keep the ${identityInstruction} exactly the same.
+         fullPrompt = `GENERATE a professional passport photo.
+         INSTRUCTIONS:
+         1. IDENTITY: Keep ${identityInstruction} EXACTLY the same.
          2. CLOTHING: ${dressInstruction}
          3. BACKGROUND: ${bgInstruction}
-         4. LIGHTING: Even studio lighting.
-         5. ALIGNMENT: Center ${isCouple ? 'heads' : 'head'}, show shoulders.
+         4. ALIGNMENT: Center ${isCouple ? 'heads' : 'head'}.
          ${passportConfig.country.includes('BD') ? 'Format: Bangladesh Passport standard.' : ''}
-         ${inputImages.length > 1 ? 'MERGE/COMPOSE the subjects from the input images into a single professional frame.' : ''}
-         `;
-      } else if (category.includes('Background') || category.includes('ব্যাকগ্রাউন্ড')) {
-         fullPrompt = `Edit this image. ${promptText ? promptText : 'Change the background'}. 
-         Style: ${category}. Keep the main subject intact.`;
+         ${inputImages.length > 1 ? 'MERGE the subjects into a single frame.' : ''}
+         Return ONLY the image.`;
       } else {
-         fullPrompt = `Edit this image based on the following instruction: ${promptText || category}.`;
+         fullPrompt = `Edit this image. ${promptText}. Style: ${category}. Return ONLY the image.`;
       }
       
-      fullPrompt += "\nReturn ONLY the generated image. Do not provide any text description or conversational response.";
       parts.push({ text: fullPrompt });
 
       return await makeGeminiRequest(async (ai) => {
-         // Use gemini-1.5-pro for editing as it is the most capable stable multimodal model
-         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-pro', 
-            contents: { parts: parts },
-            config: {
-              safetySettings: SAFETY_SETTINGS as any
-            },
-         });
-         
-         const generatedImages: string[] = [];
-         let textOutput = "";
+         // Fallback loop for Editing
+         const tryModel = async (model: string) => {
+             const response = await ai.models.generateContent({
+                model: model, 
+                contents: { parts: parts },
+                config: { safetySettings: SAFETY_SETTINGS as any },
+             });
+             
+             const generatedImages: string[] = [];
+             let textOutput = "";
 
-         if (response.candidates && response.candidates[0]) {
-            if (response.candidates[0].content && response.candidates[0].content.parts) {
-               for (const part of response.candidates[0].content.parts) {
-                  if (part.inlineData) {
-                     generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-                  } else if (part.text) {
-                     textOutput += part.text;
-                  }
-               }
-            }
-         }
+             if (response.candidates?.[0]?.content?.parts) {
+                for (const part of response.candidates[0].content.parts) {
+                   if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+                   else if (part.text) textOutput += part.text;
+                }
+             }
+             if (generatedImages.length > 0) return generatedImages;
+             throw new Error(textOutput || "No image generated.");
+         };
 
-         if (generatedImages.length === 0) {
-             if (textOutput) throw new Error(`AI Response: ${textOutput.substring(0, 300)}`);
-             throw new Error("No image generated by Gemini.");
+         try {
+             return await tryModel('gemini-2.0-flash');
+         } catch (e) {
+             await delay(1000);
+             return await tryModel('gemini-1.5-pro'); // 1.5 Pro is best backup for editing
          }
-         return generatedImages;
       });
   }
 
-  // ------------------------------------------------------------------
-  // SCENARIO 2: IMAGE CREATION (Text to Image)
-  // Try 'imagen-3.0-generate-001' -> Fallback 'gemini-1.5-pro'
-  // ------------------------------------------------------------------
+  // SCENARIO 2: CREATION (Text to Image) -> Imagen -> Fallback 2.0 Flash
   else {
-      let prompt = "";
-      const textOverlayInstruction = overlayText ? "IMPORTANT: Do NOT write any text on the image. Leave negative space or clean areas where text can be added later by the user." : "";
-
-      if (category.includes('Thumbnail') || category.includes('থাম্বনেইল')) {
-        prompt = `Create a high CTR YouTube/Facebook thumbnail background.
-        Topic: ${promptText}. Style: ${category}.
-        Vibrant colors, catchy composition.
-        ${textOverlayInstruction}`;
-      } else if (category.includes('Logo') || category.includes('লোগো')) {
-        prompt = `Design a professional logo.
-        Brand/Concept: ${promptText}. Style: ${category}.
-        Vector art style, simple, iconic, minimalist, white background.
-        ${textOverlayInstruction}`;
-      } else {
-        prompt = `Generate a high quality ${category} style image. 
-        Subject/Description: ${promptText || 'A creative artistic composition'}.
-        High resolution, detailed, cinematic lighting.
-        ${textOverlayInstruction}`;
-      }
+      let prompt = `Generate a high quality ${category} image. Subject: ${promptText}.`;
+      if (overlayText) prompt += " Do NOT write text on the image.";
 
       return await makeGeminiRequest(async (ai) => {
-         // ATTEMPT 1: Imagen 3.0 (Stable Public Model)
          try {
              const response = await ai.models.generateImages({
                  model: 'imagen-3.0-generate-001', 
                  prompt: prompt,
-                 config: {
-                    numberOfImages: 1,
-                    aspectRatio: finalAspectRatio as any 
-                 }
+                 config: { numberOfImages: 1, aspectRatio: finalAspectRatio as any }
              });
              
-             if (response.generatedImages && response.generatedImages.length > 0) {
-                 const base64 = response.generatedImages[0].image.imageBytes;
-                 return [`data:image/png;base64,${base64}`];
+             if (response.generatedImages?.length > 0) {
+                 return [`data:image/png;base64,${response.generatedImages[0].image.imageBytes}`];
              }
              throw new Error("Imagen returned no images.");
 
          } catch (imagenError: any) {
-             console.warn("Imagen 3.0 failed, falling back to Gemini 1.5 Pro.", imagenError.message);
+             console.warn("Imagen failed, trying Gemini 2.0 Flash.", imagenError.message);
+             await delay(1000);
              
-             // ATTEMPT 2: Fallback to Gemini 1.5 Pro
              const parts = [{ text: prompt }];
              const response = await ai.models.generateContent({
-                 model: 'gemini-1.5-pro', // Fallback to powerful stable model
+                 model: 'gemini-2.0-flash', 
                  contents: { parts: parts },
-                 config: {
-                    safetySettings: SAFETY_SETTINGS as any
-                 },
+                 config: { safetySettings: SAFETY_SETTINGS as any },
              });
 
              const generatedImages: string[] = [];
-             let textFallback = "";
-
              if (response.candidates?.[0]?.content?.parts) {
                 for (const part of response.candidates[0].content.parts) {
-                   if (part.inlineData) {
-                      generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-                   } else if (part.text) {
-                      textFallback += part.text;
-                   }
+                   if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
                 }
              }
-
-             if (generatedImages.length === 0) {
-                // If text response explains why it failed, throw that
-                if (textFallback) {
-                   throw new Error(`AI Refused: ${textFallback.substring(0, 150)}...`);
-                }
-                throw new Error("Failed to generate image with both Imagen and Gemini models.");
-             }
-             return generatedImages;
+             if (generatedImages.length > 0) return generatedImages;
+             throw new Error("Failed to generate image with both models.");
          }
       });
   }
