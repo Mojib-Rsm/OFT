@@ -194,39 +194,36 @@ export const generateBanglaContent = async (
         });
       };
 
-      // FALLBACK LOGIC: Try 2.0 Flash (New), Fallback to 1.5 Flash
+      // FALLBACK LOGIC: Try 2.0 Flash Exp -> 2.0 Flash -> 1.5 Flash
       try {
-         // Priority 1: 2.0 Flash (Primary Text Model, supports Images)
-         const primaryModel = "gemini-2.0-flash";
-         const response = await callApi(primaryModel);
+         // Priority 1: 2.0 Flash Exp (Most capable)
+         const response = await callApi("gemini-2.0-flash-exp");
          const jsonText = response.text;
          if (!jsonText) throw new Error("Empty response");
          const parsed = JSON.parse(jsonText);
          return parsed.options || [];
 
       } catch (err: any) {
-         // Check if error is related to quota or server overload or not found
-         const isRecoverable = err.message && (
-             err.message.includes('429') || 
-             err.message.includes('503') || 
-             err.message.includes('quota') || 
-             err.message.includes('RESOURCE_EXHAUSTED') ||
-             err.message.includes('not found')
-         );
-         
-         if (isRecoverable) {
-            console.warn(`Primary model failed (${err.message}). Waiting 1s then falling back to Gemini 1.5 Flash.`);
-            // Wait 1 second before retry
-            await delay(1000);
-            
-            // Priority 2: 1.5 Flash (Stable Fallback)
-            const response = await callApi("gemini-1.5-flash");
+         console.warn(`Primary model (gemini-2.0-flash-exp) failed: ${err.message}. Retrying...`);
+         await delay(1000);
+
+         try {
+            // Priority 2: 2.0 Flash (Stable)
+            const response = await callApi("gemini-2.0-flash");
             const jsonText = response.text;
-            if (!jsonText) return [];
+            if (!jsonText) throw new Error("Empty response");
             const parsed = JSON.parse(jsonText);
             return parsed.options || [];
-         } else {
-            throw err; 
+         } catch (err2: any) {
+             console.warn(`Secondary model (gemini-2.0-flash) failed: ${err2.message}. Falling back to 1.5 Flash.`);
+             await delay(1500);
+             
+             // Priority 3: 1.5 Flash (Most Stable Fallback)
+             const response = await callApi("gemini-1.5-flash");
+             const jsonText = response.text;
+             if (!jsonText) return [];
+             const parsed = JSON.parse(jsonText);
+             return parsed.options || [];
          }
       }
     });
@@ -275,7 +272,7 @@ export const generateImage = async (
 
   // ------------------------------------------------------------------
   // SCENARIO 1: IMAGE EDITING (Passport, Background Remove, Uploads)
-  // Use 'gemini-2.0-flash' (multimodal)
+  // Use 'gemini-2.0-flash-exp' (multimodal editing)
   // ------------------------------------------------------------------
   if (isEditing) {
       let fullPrompt = "";
@@ -328,12 +325,11 @@ export const generateImage = async (
       parts.push({ text: fullPrompt });
 
       return await makeGeminiRequest(async (ai) => {
-         // Using gemini-2.0-flash because 2.5-preview-image doesn't exist publicly
+         // Use gemini-2.0-flash-exp as it is currently best for image output/editing
          const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash', 
+            model: 'gemini-2.0-flash-exp', 
             contents: { parts: parts },
             config: {
-              // imageConfig: { aspectRatio: finalAspectRatio as any }, // 2.0 Flash might not support aspect ratio config in generateContent, prompting handles layout usually
               safetySettings: SAFETY_SETTINGS as any
             },
          });
@@ -354,26 +350,8 @@ export const generateImage = async (
          }
 
          if (generatedImages.length === 0) {
-            // If failed, try gemini-1.5-pro as fallback for complex editing if 2.0 flash returns text
-             console.warn("Gemini 2.0 Flash returned no image, trying 1.5 Pro...");
-             const responseFallback = await ai.models.generateContent({
-                model: 'gemini-1.5-pro',
-                contents: { parts: parts },
-                config: { safetySettings: SAFETY_SETTINGS as any },
-             });
-             
-             if (responseFallback.candidates?.[0]?.content?.parts) {
-                for (const part of responseFallback.candidates[0].content.parts) {
-                   if (part.inlineData) {
-                      generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-                   }
-                }
-             }
-
-             if (generatedImages.length === 0) {
-                 if (textOutput) throw new Error(`AI Response: ${textOutput.substring(0, 250)}`);
-                 throw new Error("No image generated.");
-             }
+             if (textOutput) throw new Error(`AI Response: ${textOutput.substring(0, 300)}`);
+             throw new Error("No image generated by Gemini 2.0 Flash Exp.");
          }
          return generatedImages;
       });
@@ -381,7 +359,7 @@ export const generateImage = async (
 
   // ------------------------------------------------------------------
   // SCENARIO 2: IMAGE CREATION (Text to Image)
-  // Try 'imagen-3.0-generate-001' (Stable), fallback to 'gemini-2.0-flash'
+  // Try 'imagen-3.0-generate-001' -> Fallback 'gemini-2.0-flash-exp'
   // ------------------------------------------------------------------
   else {
       let prompt = "";
@@ -423,12 +401,12 @@ export const generateImage = async (
              throw new Error("Imagen returned no images.");
 
          } catch (imagenError: any) {
-             console.warn("Imagen 3.0 failed, falling back to Gemini 2.0 Flash.", imagenError.message);
+             console.warn("Imagen 3.0 failed, falling back to Gemini 2.0 Flash Exp.", imagenError.message);
              
-             // ATTEMPT 2: Fallback to Gemini 2.0 Flash
+             // ATTEMPT 2: Fallback to Gemini 2.0 Flash Exp
              const parts = [{ text: prompt }];
              const response = await ai.models.generateContent({
-                 model: 'gemini-2.0-flash',
+                 model: 'gemini-2.0-flash-exp', // Explicitly use experimental model for image gen
                  contents: { parts: parts },
                  config: {
                     safetySettings: SAFETY_SETTINGS as any
@@ -436,15 +414,23 @@ export const generateImage = async (
              });
 
              const generatedImages: string[] = [];
+             let textFallback = "";
+
              if (response.candidates?.[0]?.content?.parts) {
                 for (const part of response.candidates[0].content.parts) {
                    if (part.inlineData) {
                       generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+                   } else if (part.text) {
+                      textFallback += part.text;
                    }
                 }
              }
 
              if (generatedImages.length === 0) {
+                // If text response explains why it failed, throw that
+                if (textFallback) {
+                   throw new Error(`AI Refused: ${textFallback.substring(0, 150)}...`);
+                }
                 throw new Error("Failed to generate image with both Imagen and Gemini models.");
              }
              return generatedImages;
@@ -452,4 +438,3 @@ export const generateImage = async (
       });
   }
 };
-    
