@@ -53,6 +53,8 @@ const makeGeminiRequest = async <T>(
     } catch (error: any) {
       console.warn(`Key ...${apiKey.slice(-4)} failed: ${error.message}. Switching key...`);
       lastError = error;
+      // If error is 429, wait a bit longer before trying next key
+      if (error.message?.includes('429')) await delay(1000);
       continue;
     }
   }
@@ -170,8 +172,7 @@ export const generateBanglaContent = async (
     const isOCR = type === ContentType.IMG_TO_TEXT;
     
     try {
-       // Priority 1: gemini-2.5-flash (User requested)
-       // For OCR, use gemini-2.5-pro or 3-pro if available, defaulting to flash for speed
+       // Priority 1: gemini-2.5-flash (User List) OR gemini-3-pro for OCR
        const primaryModel = isOCR ? "gemini-3-pro" : "gemini-2.5-flash";
        console.log(`Trying Primary Model: ${primaryModel}`);
        
@@ -186,7 +187,7 @@ export const generateBanglaContent = async (
        await delay(1000);
 
        try {
-          // Priority 2: gemini-2.0-flash (Stable)
+          // Priority 2: gemini-2.0-flash (User List)
           const secondaryModel = "gemini-2.0-flash";
           console.log(`Trying Secondary Model: ${secondaryModel}`);
 
@@ -201,8 +202,8 @@ export const generateBanglaContent = async (
            await delay(2000);
 
            try {
-               // Priority 3: gemini-2.5-pro (Strong fallback)
-               const tertiaryModel = "gemini-2.5-pro";
+               // Priority 3: gemini-3-pro (User List - Strongest)
+               const tertiaryModel = "gemini-3-pro";
                console.log(`Trying Tertiary Model: ${tertiaryModel}`);
 
                const response = await callApi(tertiaryModel);
@@ -250,7 +251,6 @@ export const generateImage = async (
 ): Promise<string[]> => {
   
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
-  // Editing logic applies to Passport, BG Remove, and now DOC_ENHANCER
   const isDocEnhancer = category.includes('ডকুমেন্ট') || category.includes('DOC_ENHANCER') || category.includes('স্ক্যান');
   const isEditing = (inputImages && inputImages.length > 0) || isDocEnhancer;
 
@@ -267,7 +267,6 @@ export const generateImage = async (
       });
 
       if (passportConfig) {
-         // ... existing passport logic ...
          const dressInstruction = passportConfig.dress.includes('আসল') 
            ? 'Ensure clothing looks neat.' 
            : `Change outfit to ${getDressDescription(passportConfig.dress, passportConfig.coupleDress)}.`;
@@ -338,14 +337,14 @@ export const generateImage = async (
          };
 
          try {
-             // Priority 1: gemini-2.0-flash (Stable for editing)
-             return await tryModel('gemini-2.0-flash');
+             // Priority 1: gemini-2.5-flash-preview-image (User Requested)
+             return await tryModel('gemini-2.5-flash-preview-image');
          } catch (e) {
              console.warn("Editing model 1 failed, trying fallback...");
              await delay(1000);
              try {
-                 // Priority 2: gemini-2.5-flash
-                 return await tryModel('gemini-2.5-flash');
+                 // Priority 2: gemini-2.0-flash (Stable fallback)
+                 return await tryModel('gemini-2.0-flash');
              } catch (e2) {
                  await delay(1000);
                  try {
@@ -404,12 +403,12 @@ export const generateImage = async (
                   console.warn("Imagen Standard failed, trying Gemini Generator...", err2.message);
                   await delay(1000);
 
-                  // Priority 3: gemini-2.0-flash (Fallback for images)
+                  // Priority 3: gemini-2.0-flash-exp (Fallback for images)
                   try {
                       const parts = [{ text: prompt }];
-                      console.log("Trying Fallback: gemini-2.0-flash");
+                      console.log("Trying Fallback: gemini-2.0-flash-exp");
                       const response = await ai.models.generateContent({
-                          model: 'gemini-2.0-flash', 
+                          model: 'gemini-2.0-flash-exp', 
                           contents: { parts: parts },
                           config: { safetySettings: SAFETY_SETTINGS as any },
                       });
