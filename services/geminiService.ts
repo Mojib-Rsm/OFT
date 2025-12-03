@@ -82,22 +82,27 @@ export const generateBanglaContent = async (
     
     Content Types & Styles:
     1. Posts/Captions: Engaging, varied length, use emojis.
-    2. Comments: Contextual, reply-oriented, natural slang. If an image/screenshot is provided, analyze it thoroughly (read text, understand visual context) and generate relevant comments.
-    3. Bios: Short, stylish, identity-focused. Can use vertical bars (|), bullets, or line breaks.
-    4. Stories: Very short, punchy, suitable for text overlay on images (under 15 words).
-    5. Notes: Extremely short thoughts (max 60 characters) like Instagram Notes.
+    2. Comments: Contextual, reply-oriented, natural slang. If an image/screenshot is provided, analyze it thoroughly.
+    3. Bios: Short, stylish, identity-focused.
+    4. Stories: Very short, punchy (under 15 words).
+    5. Notes: Extremely short thoughts (max 60 characters).
     6. Scripts: Structured video scripts (Title, Hook, Body, Call to Action).
-    7. Emails: Professional or formal format. Subject line must be included.
-    8. Ad Copies: Catchy headline, benefit-driven body, strong Call to Action (CTA).
+    7. Emails: Professional or formal format.
+    8. Ad Copies: Catchy headline, benefit-driven body, strong Call to Action.
     9. Poems: Rhythmic, artistic, stanza-based structure.
-    10. PDF Maker: Structured professional documents (CV, Report, Application). USE MARKDOWN for formatting: use **bold** for headings/key terms, and use newlines for spacing.
-    11. Image To Text (OCR): Act as a precise Optical Character Recognition (OCR) scanner. Extract text verbatim from images. Maintain original paragraphs and lists. Support both Bengali and English in the same document.
+    10. PDF Maker: Structured professional documents (Report, Assignment). USE MARKDOWN (bold, newlines).
+    11. Image To Text (OCR): Extract text verbatim.
+    
+    // NEW COMPUTER SHOP TOOLS
+    12. Legal Agreement (Stamps): Generate formal legal text suitable for Non-Judicial Stamps. Use standard legal Bengali terminology (হলফনামা, চুক্তিপত্র, অঙ্গীকারনামা). Format clearly with "Member 1", "Member 2", "Terms & Conditions", "Witnesses".
+    13. Official Application: Formal application letters to Govt/Bank/Union Parishad. Use proper "To/Subject/Body/Sincerely" format.
+    14. CV/Bio-data: 
+        - If "Corporate": Professional English Resume structure (Summary, Skills, Exp, Edu).
+        - If "Marriage": Traditional Bengali Marriage Bio-data structure (Name, Father/Mother, Address, Edu, Physical, Family Details).
 
     Guidelines:
-    - If Language is Bengali, use authentic informal Bengali (colloquial/internet slang mixed with standard Bangla where appropriate).
-    - If Language is English, use standard or casual English based on tone.
-    - Use relevant emojis to make the content lively.
-    - For Political Comments: Be persuasive, logical, or critical based on whether it is Support or Oppose.
+    - If Language is Bengali, use authentic informal Bengali for social, but FORMAL SADHU/CHOLITO mix for Legal/Applications as appropriate.
+    - For Political Comments: Be persuasive, logical, or critical.
     - STRICTLY output JSON with a property "options" containing an array of strings.
   `;
 
@@ -109,16 +114,14 @@ export const generateBanglaContent = async (
     ${tone ? `- Tone/Mood: ${tone}` : ''}
     ${length ? `- Desired Length: ${length}` : ''}
     ${userInstruction ? `- Specific User Instruction/Point to include: ${userInstruction}` : ''}
-    ${inputImages && inputImages.length > 0 ? `- Attached Image(s): This is a screenshot/image. Read any text visible in it and analyze the visual context to generate relevant comments.` : ''}
+    ${inputImages && inputImages.length > 0 ? `- Attached Image(s): Analyze the visual context.` : ''}
     
     Specific Instructions:
-    - If Bio: Make them look aesthetic.
-    - If Story/Note: Keep it bite-sized. Notes MUST be very short (under 60 chars).
-    - If Script: Provide a structured format (Hook, Scene, Dialogue).
-    - If Email: Include "Subject:" at the top, then the body.
-    - If Ad Copy: Use "Headline:", "Body:", "CTA:" structure.
-    - If PDF Maker: Create a structured document. Use **Bold** for titles and important labels. Ensure proper spacing (newlines) between sections.
-    - **CRITICAL:** If "Specific User Instruction" is provided, ensure the generated content specifically mentions or addresses that point.
+    - If Legal: Create a draft suitable for a 300/1000 TK Stamp. Include placeholders for Names/Dates [.......].
+    - If CV_BIO: Create a complete structured format. Use Markdown for bold headings.
+    - If Application: Standard formal letter format.
+    - If PDF Maker: Create a structured document. Use **Bold** for titles.
+    - **CRITICAL:** If "Specific User Instruction" is provided, ensure the generated content specifically mentions that point.
     
     Return a JSON object with a single property 'options' which is an array of strings.
   `;
@@ -168,8 +171,8 @@ export const generateBanglaContent = async (
     
     try {
        // Priority 1: gemini-2.5-flash (User requested)
-       // For OCR, use gemini-2.0-flash-exp for better vision
-       const primaryModel = isOCR ? "gemini-2.0-flash-exp" : "gemini-2.5-flash";
+       // For OCR, use gemini-2.5-pro or 3-pro if available, defaulting to flash for speed
+       const primaryModel = isOCR ? "gemini-3-pro" : "gemini-2.5-flash";
        console.log(`Trying Primary Model: ${primaryModel}`);
        
        const response = await callApi(primaryModel);
@@ -198,8 +201,8 @@ export const generateBanglaContent = async (
            await delay(2000);
 
            try {
-               // Priority 3: gemini-2.0-flash-exp (Experimental fallback)
-               const tertiaryModel = "gemini-2.0-flash-exp";
+               // Priority 3: gemini-2.5-pro (Strong fallback)
+               const tertiaryModel = "gemini-2.5-pro";
                console.log(`Trying Tertiary Model: ${tertiaryModel}`);
 
                const response = await callApi(tertiaryModel);
@@ -247,10 +250,12 @@ export const generateImage = async (
 ): Promise<string[]> => {
   
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
-  const isEditing = inputImages && inputImages.length > 0;
+  // Editing logic applies to Passport, BG Remove, and now DOC_ENHANCER
+  const isDocEnhancer = category.includes('ডকুমেন্ট') || category.includes('DOC_ENHANCER') || category.includes('স্ক্যান');
+  const isEditing = (inputImages && inputImages.length > 0) || isDocEnhancer;
 
-  // SCENARIO 1: EDITING (Passport, Bg Remove)
-  if (isEditing) {
+  // SCENARIO 1: EDITING (Passport, Bg Remove, Doc Enhancer)
+  if (isEditing && inputImages && inputImages.length > 0) {
       let fullPrompt = "";
       const parts: any[] = [];
       
@@ -262,6 +267,7 @@ export const generateImage = async (
       });
 
       if (passportConfig) {
+         // ... existing passport logic ...
          const dressInstruction = passportConfig.dress.includes('আসল') 
            ? 'Ensure clothing looks neat.' 
            : `Change outfit to ${getDressDescription(passportConfig.dress, passportConfig.coupleDress)}.`;
@@ -285,6 +291,17 @@ export const generateImage = async (
          ${passportConfig.country.includes('BD') ? 'Format: Bangladesh Passport standard.' : ''}
          ${inputImages.length > 1 ? 'MERGE the subjects into a single frame.' : ''}
          Return ONLY the image.`;
+      } else if (isDocEnhancer) {
+         fullPrompt = `
+           Act as a professional Document Scanner and Restoration AI.
+           Task: Enhance this document image for printing.
+           1. BACKGROUND: Remove shadows, wrinkles, and dark spots. Make background pure clean WHITE.
+           2. TEXT: Sharpen the text. If it is black and white, make text high-contrast BLACK. If colored, keep colors vivid.
+           3. ALIGNMENT: Straighten the document if it is skewed (Perspective Correction).
+           4. OUTPUT: A high-quality, printable scanned version of the input.
+           ${promptText ? `Additional Instruction: ${promptText}` : ''}
+           Return ONLY the enhanced image.
+         `;
       } else {
          fullPrompt = `Edit this image. ${promptText}. Style: ${category}. Return ONLY the image.`;
       }
@@ -321,19 +338,19 @@ export const generateImage = async (
          };
 
          try {
-             // Priority 1: gemini-2.0-flash-exp (Experimental, good for multimodal)
-             return await tryModel('gemini-2.0-flash-exp');
+             // Priority 1: gemini-2.0-flash (Stable for editing)
+             return await tryModel('gemini-2.0-flash');
          } catch (e) {
              console.warn("Editing model 1 failed, trying fallback...");
              await delay(1000);
              try {
-                 // Priority 2: gemini-2.0-flash (Stable)
-                 return await tryModel('gemini-2.0-flash');
+                 // Priority 2: gemini-2.5-flash
+                 return await tryModel('gemini-2.5-flash');
              } catch (e2) {
                  await delay(1000);
                  try {
-                     // Final attempt: gemini-2.5-flash
-                     return await tryModel('gemini-2.5-flash');
+                     // Final attempt: gemini-3-pro (If available and needed for complex edits)
+                     return await tryModel('gemini-3-pro');
                  } catch (e3) {
                      throw new Error(`Editing Failed. Details: ${errorLog.join(' | ')}`);
                  }
@@ -387,13 +404,12 @@ export const generateImage = async (
                   console.warn("Imagen Standard failed, trying Gemini Generator...", err2.message);
                   await delay(1000);
 
-                  // Priority 3: gemini-2.0-flash-exp (Fallback for images)
-                  // Using 'generateContent' with experimental models often yields inline images for some keys/regions
+                  // Priority 3: gemini-2.0-flash (Fallback for images)
                   try {
                       const parts = [{ text: prompt }];
-                      console.log("Trying Fallback: gemini-2.0-flash-exp");
+                      console.log("Trying Fallback: gemini-2.0-flash");
                       const response = await ai.models.generateContent({
-                          model: 'gemini-2.0-flash-exp', 
+                          model: 'gemini-2.0-flash', 
                           contents: { parts: parts },
                           config: { safetySettings: SAFETY_SETTINGS as any },
                       });

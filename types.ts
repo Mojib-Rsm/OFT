@@ -16,6 +16,10 @@ export enum ContentType {
   BG_REMOVE = 'ব্যাকগ্রাউন্ড এডিটর',
   PDF_MAKER = 'পিডিএফ মেকার (PDF)',
   IMG_TO_TEXT = 'ইমেজ টু টেক্সট (OCR)',
+  DOC_ENHANCER = 'ডকুমেন্ট ফিক্সার (ক্লিয়ার)',
+  LEGAL = 'চুক্তিপত্র / স্ট্যাম্প',
+  APPLICATION = 'অফিসিয়াল আবেদন',
+  CV_BIO = 'সিভি / বায়োডাটা',
   OTHER = 'অন্যান্য'
 }
 
@@ -155,6 +159,40 @@ export enum BgRemoveCategory {
   BLUR = 'ব্লার ব্যাকগ্রাউন্ড',
   SCENERY = 'প্রকৃতির দৃশ্য',
   OFFICE = 'অফিস ব্যাকগ্রাউন্ড'
+}
+
+// Computer Shop Categories
+export enum DocEnhancerCategory {
+  SCAN_EFFECT = 'স্ক্যান ইফেক্ট (সাদা-কালো)',
+  BRIGHTEN = 'ব্রাইট & শার্প (রঙিন)',
+  MAGIC_ERASER = 'দাগ/কালি রিমুভ',
+  OLD_RESTORE = 'পুরনো দলিল ঠিক করা'
+}
+
+export enum LegalCategory {
+  HOUSE_RENT = 'বাড়ি ভাড়া চুক্তিপত্র',
+  AFFIDAVIT = 'হলফনামা (Affidavit)',
+  LAND_SALE = 'জমি বিক্রয় চুক্তি',
+  PARTNERSHIP = 'ব্যবসায়িক পার্টনারশিপ',
+  LOAN_DEED = 'টাকা ধার বা লোন চুক্তি',
+  GENERAL = 'সাধারণ স্ট্যাম্প'
+}
+
+export enum ApplicationCategory {
+  NID_FIX = 'NID / ভোটার আইডি সংশোধন',
+  BANK = 'ব্যাংক (চেক বই/লোন)',
+  GOVT_OFFICE = 'সরকারি অফিস / ডিসি অফিস',
+  UNION = 'ইউনিয়ন পরিষদ / কাউন্সিলর',
+  POLICE = 'থানা / জিডি (GD)',
+  ACADEMIC = 'স্কুল / কলেজ ছুটি'
+}
+
+export enum CvCategory {
+  CORPORATE = 'কর্পোরেট সিভি (English)',
+  GOVT_JOB = 'সরকারি চাকরির সিভি (Bangla)',
+  MARRIAGE_MALE = 'বিয়ের বায়োডাটা (পাত্র)',
+  MARRIAGE_FEMALE = 'বিয়ের বায়োডাটা (পাত্রী)',
+  FRESHER = 'ফ্রেশার / ছাত্র'
 }
 
 export enum OtherCategory {

@@ -25,7 +25,11 @@ import {
   ContentTone, 
   ContentLength,
   ContentLanguage, 
-  ImageAspectRatio
+  ImageAspectRatio,
+  DocEnhancerCategory,
+  LegalCategory,
+  ApplicationCategory,
+  CvCategory
 } from '../types';
 import { 
   Wand2, 
@@ -62,7 +66,10 @@ import {
   Users,
   Plus,
   ScanText,
-  Languages
+  Languages,
+  ScrollText,
+  FileBadge,
+  UserCheck
 } from 'lucide-react';
 
 interface InputSectionProps {
@@ -137,6 +144,12 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [bgRemoveCategory, setBgRemoveCategory] = usePersistedState<string>('oft_cat_bg', BgRemoveCategory.WHITE);
   const [otherCategory, setOtherCategory] = usePersistedState<string>('oft_cat_other', OtherCategory.BIRTHDAY);
   
+  // New Categories for Computer Shop
+  const [docEnhancerCategory, setDocEnhancerCategory] = usePersistedState<string>('oft_cat_doc_enhance', DocEnhancerCategory.SCAN_EFFECT);
+  const [legalCategory, setLegalCategory] = usePersistedState<string>('oft_cat_legal', LegalCategory.HOUSE_RENT);
+  const [applicationCategory, setApplicationCategory] = usePersistedState<string>('oft_cat_app', ApplicationCategory.NID_FIX);
+  const [cvCategory, setCvCategory] = usePersistedState<string>('oft_cat_cv', CvCategory.CORPORATE);
+
   // Passport
   const [ppCountry, setPpCountry] = usePersistedState<string>('oft_pp_country', PassportCountry.BD);
   const [ppBg, setPpBg] = usePersistedState<string>('oft_pp_bg', PassportBg.WHITE);
@@ -177,15 +190,19 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.LOGO: return logoCategory;
       case ContentType.PASSPORT: return 'Passport';
       case ContentType.BG_REMOVE: return bgRemoveCategory;
+      case ContentType.DOC_ENHANCER: return docEnhancerCategory;
+      case ContentType.LEGAL: return legalCategory;
+      case ContentType.APPLICATION: return applicationCategory;
+      case ContentType.CV_BIO: return cvCategory;
       case ContentType.OTHER: return otherCategory;
       default: return '';
     }
   };
 
   const isPolitical = (category: string) => category.includes('রাজনৈতিক');
-  const isImageTool = (type: ContentType) => [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type);
+  const isImageTool = (type: ContentType) => [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.DOC_ENHANCER].includes(type);
   const supportsImageUpload = (type: ContentType) => isImageTool(type) || type === ContentType.COMMENT || type === ContentType.IMG_TO_TEXT;
-  const requiresImageUpload = (type: ContentType) => [ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.IMG_TO_TEXT].includes(type);
+  const requiresImageUpload = (type: ContentType) => [ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.IMG_TO_TEXT, ContentType.DOC_ENHANCER].includes(type);
   const allowMultipleImages = activeTab === ContentType.PASSPORT && ppDress === PassportDress.COUPLE;
   const maxImages = allowMultipleImages ? 3 : 1;
   const supportsOverlayText = (type: ContentType) => [ContentType.IMAGE, ContentType.THUMBNAIL].includes(type);
@@ -280,6 +297,10 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.THUMBNAIL: categories = ThumbnailCategory; currentValue = thumbnailCategory; setter = setThumbnailCategory; break;
       case ContentType.LOGO: categories = LogoCategory; currentValue = logoCategory; setter = setLogoCategory; break;
       case ContentType.BG_REMOVE: categories = BgRemoveCategory; currentValue = bgRemoveCategory; setter = setBgRemoveCategory; break;
+      case ContentType.DOC_ENHANCER: categories = DocEnhancerCategory; currentValue = docEnhancerCategory; setter = setDocEnhancerCategory; break;
+      case ContentType.LEGAL: categories = LegalCategory; currentValue = legalCategory; setter = setLegalCategory; break;
+      case ContentType.APPLICATION: categories = ApplicationCategory; currentValue = applicationCategory; setter = setApplicationCategory; break;
+      case ContentType.CV_BIO: categories = CvCategory; currentValue = cvCategory; setter = setCvCategory; break;
       case ContentType.OTHER: categories = OtherCategory; currentValue = otherCategory; setter = setOtherCategory; break;
     }
 
@@ -314,6 +335,10 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.LOGO: return "উদাহরণ: একটি কফি শপের লোগো...";
       case ContentType.PASSPORT: return "অতিরিক্ত নির্দেশনা...";
       case ContentType.BG_REMOVE: return "কোন ধরণের ব্যাকগ্রাউন্ড চান...";
+      case ContentType.DOC_ENHANCER: return "অতিরিক্ত নির্দেশনা (যেমন: লেখাকে আরও কালো করো)...";
+      case ContentType.LEGAL: return "উদাহরণ: বাসা ভাড়া, নাম, জামানত, শর্তাবলী...";
+      case ContentType.APPLICATION: return "উদাহরণ: আইডি কার্ডে নামের বানান ভুল সংশোধনের জন্য...";
+      case ContentType.CV_BIO: return "উদাহরণ: আপনার নাম, শিক্ষা, অভিজ্ঞতা, স্কিল...";
       case ContentType.OTHER: return "উদাহরণ: বসের কাছে ছুটির আবেদন...";
       default: return "";
     }
@@ -323,6 +348,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     if (requiresImageUpload(activeTab)) {
        if (allowMultipleImages) return `আপনার ছবি আপলোড করুন (${selectedImages.length}/${maxImages})`;
        if (activeTab === ContentType.IMG_TO_TEXT) return "ডকুমেন্ট / ইমেজের ছবি আপলোড করুন";
+       if (activeTab === ContentType.DOC_ENHANCER) return "ঘোলা বা কালো ডকুমেন্টের ছবি দিন";
        return "আপনার ছবি আপলোড করুন";
     }
     if (activeTab === ContentType.COMMENT) return "স্ক্রিনশট আপলোড করুন (অপশনাল)";
@@ -355,6 +381,11 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
 
       <div className="p-4 sm:p-6 bg-slate-50/50 border-b border-slate-100">
         <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide snap-x">
+          <TabButton type={ContentType.DOC_ENHANCER} icon={ScanText} label="ডকুমেন্ট ফিক্সার" />
+          <TabButton type={ContentType.LEGAL} icon={ScrollText} label="চুক্তি/স্ট্যাম্প" />
+          <TabButton type={ContentType.CV_BIO} icon={UserCheck} label="সিভি/বায়োডাটা" />
+          <TabButton type={ContentType.APPLICATION} icon={FileBadge} label="আবেদন" />
+          <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
           <TabButton type={ContentType.COMMENT} icon={MessageSquare} label="কমেন্ট" />
           <TabButton type={ContentType.POST} icon={FileText} label="পোস্ট" />
           <TabButton type={ContentType.STORY} icon={Zap} label="স্টোরি" />
@@ -475,7 +506,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
 
         <div className="space-y-2">
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
-            {activeTab === ContentType.IMG_TO_TEXT ? "নির্দেশনা (অপশনাল)" : activeTab === ContentType.IMAGE || activeTab === ContentType.THUMBNAIL || activeTab === ContentType.LOGO ? "ইমেজ প্রম্পট / বিষয়বস্তু" : "বিষয়বস্তু / প্রসঙ্গ"}
+            {activeTab === ContentType.IMG_TO_TEXT ? "নির্দেশনা (অপশনাল)" : activeTab === ContentType.IMAGE || activeTab === ContentType.THUMBNAIL || activeTab === ContentType.LOGO ? "ইমেজ প্রম্পট / বিষয়বস্তু" : "বিষয়বস্তু / প্রসঙ্গ / তথ্য"}
           </label>
           <textarea
             value={context}

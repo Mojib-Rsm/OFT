@@ -21,7 +21,11 @@ import {
   Megaphone,
   Feather,
   FileDown,
-  ScanText
+  ScanText,
+  Printer,
+  FileBadge,
+  ScrollText,
+  UserCheck
 } from 'lucide-react';
 import { ContentType } from '../types';
 
@@ -32,21 +36,19 @@ interface ToolGridProps {
 const ToolGrid: React.FC<ToolGridProps> = ({ onSelectTool }) => {
   const categories = [
     {
-      id: 'social',
-      title: 'সোশ্যাল ও ক্রিয়েটিভ',
-      subtitle: 'সোশ্যাল মিডিয়া রাইটিং ও সৃজনশীল লেখা',
-      icon: PenTool,
-      gradient: 'from-blue-500 to-cyan-400',
-      bg: 'bg-blue-50',
-      border: 'border-blue-100',
-      text: 'text-blue-600',
+      id: 'shop',
+      title: 'কম্পিউটার দোকান ও প্রিন্টিং',
+      subtitle: 'ডকুমেন্ট, সিভি, চুক্তিপত্র ও আবেদন',
+      icon: Printer,
+      gradient: 'from-teal-500 to-emerald-500',
+      bg: 'bg-teal-50',
+      border: 'border-teal-100',
+      text: 'text-teal-600',
       tools: [
-        { type: ContentType.POST, label: 'পোস্ট / ক্যাপশন', icon: FileText, desc: 'স্মার্ট ও আকর্ষণীয় পোস্ট' },
-        { type: ContentType.COMMENT, label: 'কমেন্ট জেনারেটর', icon: MessageSquare, desc: 'উপযুক্ত রিপ্লাই ও কমেন্ট' },
-        { type: ContentType.STORY, label: 'স্টোরি / স্ট্যাটাস', icon: Zap, desc: 'ছোট ও পাঞ্চি স্ট্যাটাস' },
-        { type: ContentType.BIO, label: 'প্রোফাইল বায়ো', icon: User, desc: 'স্টাইলিশ প্রোফাইল বায়ো' },
-        { type: ContentType.POEM, label: 'কবিতা / ছড়া', icon: Feather, desc: 'ছন্দ ও কবিতার লাইন' },
-        { type: ContentType.NOTE, label: 'শর্ট নোট (Notes)', icon: StickyNote, desc: '৬০ অক্ষরের নোট' },
+        { type: ContentType.DOC_ENHANCER, label: 'ডকুমেন্ট ফিক্সার', icon: ScanText, desc: 'ছবি থেকে ক্লিয়ার ডকুমেন্ট (ফটোকপি)' },
+        { type: ContentType.CV_BIO, label: 'সিভি / বায়োডাটা', icon: UserCheck, desc: 'চাকরি ও বিয়ের বায়োডাটা' },
+        { type: ContentType.LEGAL, label: 'চুক্তি / স্ট্যাম্প', icon: ScrollText, desc: 'বাসা ভাড়া, জমি ও হলফনামা' },
+        { type: ContentType.APPLICATION, label: 'অফিসিয়াল আবেদন', icon: FileBadge, desc: 'NID, ব্যাংক ও সরকারি আবেদন' },
       ]
     },
     {
@@ -64,6 +66,24 @@ const ToolGrid: React.FC<ToolGridProps> = ({ onSelectTool }) => {
         { type: ContentType.LOGO, label: 'লোগো ডিজাইন', icon: Stamp, desc: 'ব্র্যান্ড লোগো আইডিয়া' },
         { type: ContentType.PASSPORT, label: 'পাসপোর্ট ফটো', icon: UserSquare, desc: 'অফিসিয়াল ছবির স্টাইল' },
         { type: ContentType.BG_REMOVE, label: 'ব্যাকগ্রাউন্ড এডিটর', icon: Eraser, desc: 'ব্যাকগ্রাউন্ড পরিবর্তন' },
+      ]
+    },
+    {
+      id: 'social',
+      title: 'সোশ্যাল ও ক্রিয়েটিভ',
+      subtitle: 'সোশ্যাল মিডিয়া রাইটিং ও সৃজনশীল লেখা',
+      icon: PenTool,
+      gradient: 'from-blue-500 to-cyan-400',
+      bg: 'bg-blue-50',
+      border: 'border-blue-100',
+      text: 'text-blue-600',
+      tools: [
+        { type: ContentType.POST, label: 'পোস্ট / ক্যাপশন', icon: FileText, desc: 'স্মার্ট ও আকর্ষণীয় পোস্ট' },
+        { type: ContentType.COMMENT, label: 'কমেন্ট জেনারেটর', icon: MessageSquare, desc: 'উপযুক্ত রিপ্লাই ও কমেন্ট' },
+        { type: ContentType.STORY, label: 'স্টোরি / স্ট্যাটাস', icon: Zap, desc: 'ছোট ও পাঞ্চি স্ট্যাটাস' },
+        { type: ContentType.BIO, label: 'প্রোফাইল বায়ো', icon: User, desc: 'স্টাইলিশ প্রোফাইল বায়ো' },
+        { type: ContentType.POEM, label: 'কবিতা / ছড়া', icon: Feather, desc: 'ছন্দ ও কবিতার লাইন' },
+        { type: ContentType.NOTE, label: 'শর্ট নোট (Notes)', icon: StickyNote, desc: '৬০ অক্ষরের নোট' },
       ]
     },
     {
