@@ -164,13 +164,14 @@ export const generateBanglaContent = async (
       });
     };
 
-    // --- ROBUST FALLBACK SYSTEM (UPDATED MODELS) ---
-    // Text Generation & OCR Strategy
+    // --- TEXT GENERATION FALLBACK STRATEGY ---
+    // User requested models: gemini-2.5-flash, gemini-2.0-flash, gemini-3-pro, gemini-2.5-pro
+    
     const isOCR = type === ContentType.IMG_TO_TEXT;
     
     try {
-       // Primary: gemini-2.5-flash
-       // For OCR, try gemini-3-pro first for best vision
+       // Priority 1: gemini-2.5-flash (Fast, latest flash)
+       // For OCR, try gemini-3-pro if available for best vision
        const primaryModel = isOCR ? "gemini-3-pro" : "gemini-2.5-flash";
        console.log(`Trying Primary Model: ${primaryModel}`);
        
@@ -181,13 +182,12 @@ export const generateBanglaContent = async (
        return parsed.options || [];
 
     } catch (err: any) {
-       console.warn(`Primary model failed: ${err.message}. Waiting 1s before retry...`);
+       console.warn(`Primary model failed: ${err.message}. Waiting 1s...`);
        await delay(1000);
 
        try {
-          // Secondary: gemini-2.0-flash
-          // For OCR fallback: gemini-2.5-flash
-          const secondaryModel = isOCR ? "gemini-2.5-flash" : "gemini-2.0-flash";
+          // Priority 2: gemini-2.0-flash (Stable, multimodal)
+          const secondaryModel = "gemini-2.0-flash";
           console.log(`Trying Secondary Model: ${secondaryModel}`);
 
           const response = await callApi(secondaryModel);
@@ -197,12 +197,13 @@ export const generateBanglaContent = async (
           return parsed.options || [];
 
        } catch (err2: any) {
-           console.warn(`Secondary model failed: ${err2.message}. Waiting 2s before retry with Tertiary...`);
+           console.warn(`Secondary model failed: ${err2.message}. Waiting 2s...`);
            await delay(2000);
 
            try {
-               // Tertiary: gemini-3-pro (Flagship / Final Fallback)
-               const tertiaryModel = "gemini-3-pro";
+               // Priority 3: gemini-2.5-pro (High intelligence fallback)
+               // OR gemini-3-pro if strictly following the 'best' logic
+               const tertiaryModel = "gemini-2.5-pro";
                console.log(`Trying Tertiary Model: ${tertiaryModel}`);
 
                const response = await callApi(tertiaryModel);
@@ -211,7 +212,7 @@ export const generateBanglaContent = async (
                const parsed = JSON.parse(jsonText);
                return parsed.options || [];
            } catch (err3: any) {
-               console.error("All models failed.");
+               console.error("All text models failed.");
                throw err3;
            }
        }
@@ -296,35 +297,58 @@ export const generateImage = async (
 
       return await makeGeminiRequest(async (ai) => {
          // Fallback loop for Editing
+         const errorLog: string[] = [];
+
          const tryModel = async (model: string) => {
              console.log(`Trying Editing Model: ${model}`);
-             const response = await ai.models.generateContent({
-                model: model, 
-                contents: { parts: parts },
-                config: { safetySettings: SAFETY_SETTINGS as any },
-             });
-             
-             const generatedImages: string[] = [];
-             let textOutput = "";
+             try {
+                const response = await ai.models.generateContent({
+                    model: model, 
+                    contents: { parts: parts },
+                    config: { safetySettings: SAFETY_SETTINGS as any },
+                });
+                
+                const generatedImages: string[] = [];
+                let textOutput = "";
 
-             if (response.candidates?.[0]?.content?.parts) {
-                for (const part of response.candidates[0].content.parts) {
-                   if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-                   else if (part.text) textOutput += part.text;
+                if (response.candidates?.[0]?.content?.parts) {
+                    for (const part of response.candidates[0].content.parts) {
+                    if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+                    else if (part.text) textOutput += part.text;
+                    }
                 }
+                if (generatedImages.length > 0) return generatedImages;
+                throw new Error(textOutput || "No image output.");
+             } catch (e: any) {
+                errorLog.push(`${model}: ${e.message}`);
+                throw e;
              }
-             if (generatedImages.length > 0) return generatedImages;
-             throw new Error(textOutput || "No image generated.");
          };
 
          try {
-             // Primary Editing Model: gemini-2.0-flash (Stable multimodal)
+             // Priority 1: gemini-2.0-flash (User requested, generally stable)
              return await tryModel('gemini-2.0-flash');
          } catch (e) {
-             console.warn("Primary editing model failed, trying fallback...", e);
+             console.warn("Editing model 1 failed, trying fallback...");
              await delay(1000);
-             // Secondary: gemini-2.5-flash
-             return await tryModel('gemini-2.5-flash');
+             try {
+                 // Priority 2: gemini-2.5-flash (User requested)
+                 return await tryModel('gemini-2.5-flash');
+             } catch (e2) {
+                 await delay(1000);
+                 try {
+                     // Priority 3: gemini-3-pro (User requested, high end)
+                     // If user doesn't have access, this will fail
+                     return await tryModel('gemini-3-pro');
+                 } catch(e3) {
+                     // Final attempt: gemini-2.0-flash-exp (if listed)
+                     try {
+                         return await tryModel('gemini-2.0-flash-exp');
+                     } catch (e4) {
+                         throw new Error(`Editing Failed. Details: ${errorLog.join(' | ')}`);
+                     }
+                 }
+             }
          }
       });
   }
@@ -335,9 +359,11 @@ export const generateImage = async (
       if (overlayText) prompt += " Do NOT write text on the image.";
 
       return await makeGeminiRequest(async (ai) => {
+         const errorLog: string[] = [];
+
          try {
-             // Primary: imagen-4.0-fast-generate
-             console.log("Trying Imagen Model: imagen-4.0-fast-generate");
+             // Priority 1: imagen-4.0-fast-generate (User requested)
+             console.log("Trying Imagen: imagen-4.0-fast-generate");
              const response = await ai.models.generateImages({
                  model: 'imagen-4.0-fast-generate', 
                  prompt: prompt,
@@ -349,13 +375,14 @@ export const generateImage = async (
              }
              throw new Error("Imagen returned no images.");
 
-         } catch (imagenError: any) {
-             console.warn("Imagen Fast failed, trying Imagen Standard.", imagenError.message);
+         } catch (err1: any) {
+             errorLog.push(`Imagen Fast: ${err1.message}`);
+             console.warn("Imagen Fast failed, trying Standard...", err1.message);
              await delay(1000);
              
              try {
-                 // Secondary: imagen-4.0-generate
-                 console.log("Trying Imagen Model: imagen-4.0-generate");
+                 // Priority 2: imagen-4.0-generate (User requested)
+                 console.log("Trying Imagen: imagen-4.0-generate");
                  const response = await ai.models.generateImages({
                      model: 'imagen-4.0-generate', 
                      prompt: prompt,
@@ -366,27 +393,33 @@ export const generateImage = async (
                      return [`data:image/png;base64,${response.generatedImages[0].image.imageBytes}`];
                  }
                  throw new Error("Imagen Standard returned no images.");
-             } catch (imagen2Error: any) {
-                  console.warn("Imagen Standard failed, trying Gemini Content Generation.", imagen2Error.message);
+             } catch (err2: any) {
+                  errorLog.push(`Imagen Std: ${err2.message}`);
+                  console.warn("Imagen Standard failed, trying Gemini Generator...", err2.message);
                   await delay(1000);
 
-                  // Tertiary: gemini-2.0-flash (Via generateContent)
-                  const parts = [{ text: prompt }];
-                  console.log("Trying Fallback Model: gemini-2.0-flash");
-                  const response = await ai.models.generateContent({
-                      model: 'gemini-2.0-flash', 
-                      contents: { parts: parts },
-                      config: { safetySettings: SAFETY_SETTINGS as any },
-                  });
+                  // Priority 3: gemini-2.0-flash (As multimodal generator)
+                  try {
+                      const parts = [{ text: prompt }];
+                      console.log("Trying Fallback: gemini-2.0-flash");
+                      const response = await ai.models.generateContent({
+                          model: 'gemini-2.0-flash', 
+                          contents: { parts: parts },
+                          config: { safetySettings: SAFETY_SETTINGS as any },
+                      });
 
-                  const generatedImages: string[] = [];
-                  if (response.candidates?.[0]?.content?.parts) {
-                      for (const part of response.candidates[0].content.parts) {
-                        if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+                      const generatedImages: string[] = [];
+                      if (response.candidates?.[0]?.content?.parts) {
+                          for (const part of response.candidates[0].content.parts) {
+                            if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+                          }
                       }
+                      if (generatedImages.length > 0) return generatedImages;
+                      throw new Error("Gemini returned no images.");
+                  } catch (err3: any) {
+                      errorLog.push(`Gemini: ${err3.message}`);
+                      throw new Error(`Image Generation Failed. Details: ${errorLog.join(' | ')}`);
                   }
-                  if (generatedImages.length > 0) return generatedImages;
-                  throw new Error("Failed to generate image with all models.");
              }
          }
       });
