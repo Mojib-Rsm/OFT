@@ -20,6 +20,9 @@ export enum ContentType {
   LEGAL = 'চুক্তিপত্র / স্ট্যাম্প',
   APPLICATION = 'অফিসিয়াল আবেদন',
   CV_BIO = 'সিভি / বায়োডাটা',
+  VISITING_CARD = 'ভিজিটিং কার্ড',
+  BANNER = 'ব্যানার / ফ্লেক্স',
+  INVITATION = 'ইনভাইটেশন কার্ড',
   OTHER = 'অন্যান্য'
 }
 
@@ -195,6 +198,28 @@ export enum CvCategory {
   FRESHER = 'ফ্রেশার / ছাত্র'
 }
 
+export enum VisitingCardCategory {
+  BUSINESS = 'বিজনেস / প্রফেশনাল',
+  ID_CARD = 'স্টুডেন্ট / অফিস আইডি',
+  SHOP = 'দোকানের কার্ড',
+  DIGITAL = 'ডিজিটাল কার্ড'
+}
+
+export enum BannerCategory {
+  SHOP = 'দোকানের ব্যানার / সাইনবোর্ড',
+  ELECTION = 'নির্বাচনী পোস্টার',
+  WAZZ = 'ওয়াজ মাহফিল / ইসলামি',
+  COACHING = 'কোচিং / ভর্তি বিজ্ঞপ্তি',
+  DISCOUNT = 'সেল / অফার'
+}
+
+export enum InvitationCategory {
+  WEDDING = 'বিয়ের কার্ড (Wedding)',
+  BIRTHDAY = 'জন্মদিন (Birthday)',
+  HALKHATA = 'হালখাতা / উদ্বোধন',
+  PARTY = 'পার্টি / দাওয়াত'
+}
+
 export enum OtherCategory {
   BIRTHDAY = 'জন্মদিনের শুভেচ্ছা',
   ANNIVERSARY = 'বিবাহ বার্ষিকী',
@@ -208,7 +233,8 @@ export enum PassportCountry {
   BD = 'বাংলাদেশ (45x35mm)',
   US = 'আমেরিকা (2x2 inch)',
   IN = 'ইন্ডিয়া (35x35mm)',
-  INT = 'ইন্টারন্যাশনাল (35x45mm)'
+  INT = 'ইন্টারন্যাশনাল (35x45mm)',
+  VISA = 'ভিসা অ্যাপ্লিকেশন (কমন সাইজ)'
 }
 
 export enum PassportBg {

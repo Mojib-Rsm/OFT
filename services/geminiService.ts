@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { ContentType, PassportConfig, ContentLanguage } from "../types";
 
@@ -111,7 +110,7 @@ export const generateBanglaContent = async (
   let prompt = `
     Generate 5 distinct options for a ${type} in ${targetLanguage} based on the following details:
     - Category: ${category}
-    - Context/Topic: ${context || 'General/Random'}
+    - Context/Data: ${context || 'General/Random'}
     ${party ? `- Target Political Party/Group: ${party}` : ''}
     ${tone ? `- Tone/Mood: ${tone}` : ''}
     ${length ? `- Desired Length: ${length}` : ''}
@@ -119,7 +118,8 @@ export const generateBanglaContent = async (
     ${inputImages && inputImages.length > 0 ? `- Attached Image(s): Analyze the visual context.` : ''}
     
     Specific Instructions:
-    - If Legal: Create a draft suitable for a 300/1000 TK Stamp. Include placeholders for Names/Dates [.......].
+    - If the "Context/Data" contains formatted keys (Name, To, Subject, etc.), extract and use that data accurately to fill the document.
+    - If Legal: Create a draft suitable for a 300/1000 TK Stamp.
     - If CV_BIO: Create a complete structured format. Use Markdown for bold headings.
     - If Application: Standard formal letter format.
     - If PDF Maker: Create a structured document. Use **Bold** for titles.
@@ -202,8 +202,8 @@ export const generateBanglaContent = async (
            await delay(2000);
 
            try {
-               // Priority 3: gemini-3-pro (User List - Strongest)
-               const tertiaryModel = "gemini-3-pro";
+               // Priority 3: gemini-2.5-pro (User List - Strongest fallback for text)
+               const tertiaryModel = "gemini-2.5-pro";
                console.log(`Trying Tertiary Model: ${tertiaryModel}`);
 
                const response = await callApi(tertiaryModel);
@@ -241,7 +241,9 @@ const getDressDescription = (dressType: string, coupleDress?: string): string =>
   return "formal official attire suitable for passport photos";
 };
 
+// MODIFIED SIGNATURE: Now accepts 'type' (ContentType) as the first argument
 export const generateImage = async (
+  type: ContentType,
   category: string,
   promptText: string,
   aspectRatio: string = "1:1",
@@ -251,10 +253,11 @@ export const generateImage = async (
 ): Promise<string[]> => {
   
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
-  const isDocEnhancer = category.includes('ডকুমেন্ট') || category.includes('DOC_ENHANCER') || category.includes('স্ক্যান');
+  // Improved detection logic using ContentType
+  const isDocEnhancer = type === ContentType.DOC_ENHANCER;
   const isEditing = (inputImages && inputImages.length > 0) || isDocEnhancer;
 
-  // SCENARIO 1: EDITING (Passport, Bg Remove, Doc Enhancer)
+  // SCENARIO 1: EDITING (Passport, Bg Remove, Doc Enhancer, or any tool with uploaded image)
   if (isEditing && inputImages && inputImages.length > 0) {
       let fullPrompt = "";
       const parts: any[] = [];
@@ -337,19 +340,20 @@ export const generateImage = async (
          };
 
          try {
-             // Priority 1: gemini-2.5-flash-preview-image (User Requested)
-             return await tryModel('gemini-2.5-flash-preview-image');
+             // Priority 1: gemini-2.0-flash (User requested for Editing)
+             return await tryModel('gemini-2.0-flash');
          } catch (e) {
              console.warn("Editing model 1 failed, trying fallback...");
              await delay(1000);
              try {
-                 // Priority 2: gemini-2.0-flash (Stable fallback)
-                 return await tryModel('gemini-2.0-flash');
+                 // Priority 2: gemini-2.5-flash-preview-image (Replaced invalid names in previous steps, but keeping strictly to user list)
+                 // Since 2.5-flash-preview-image might be unavailable, we try 2.5-flash standard as fallback for capabilities
+                 return await tryModel('gemini-2.5-flash');
              } catch (e2) {
                  await delay(1000);
                  try {
-                     // Final attempt: gemini-3-pro (If available and needed for complex edits)
-                     return await tryModel('gemini-3-pro');
+                     // Final attempt: gemini-3-pro-image (Strongest vision)
+                     return await tryModel('gemini-3-pro-image');
                  } catch (e3) {
                      throw new Error(`Editing Failed. Details: ${errorLog.join(' | ')}`);
                  }
@@ -358,10 +362,17 @@ export const generateImage = async (
       });
   }
 
-  // SCENARIO 2: CREATION (Text to Image)
+  // SCENARIO 2: CREATION (Text to Image) - Banner, Visiting Card, etc.
   else {
       let prompt = `Generate a high quality ${category} image. Subject: ${promptText}.`;
+      if (type === ContentType.VISITING_CARD) prompt = `Design a professional Visiting Card. Style: ${category}. Details: ${promptText}`;
+      if (type === ContentType.BANNER) prompt = `Design a large format Banner/Flex. Style: ${category}. Details: ${promptText}`;
+      if (type === ContentType.INVITATION) prompt = `Design a beautiful Invitation Card. Style: ${category}. Details: ${promptText}`;
+      
       if (overlayText) prompt += " Do NOT write text on the image.";
+      
+      // Force prompt to request an image output if falling back to Gemini
+      const geminiFallbackPrompt = `${prompt} \n\nCRITICAL: Return ONLY the generated image. Do not provide any text description.`;
 
       return await makeGeminiRequest(async (ai) => {
          const errorLog: string[] = [];
@@ -403,12 +414,12 @@ export const generateImage = async (
                   console.warn("Imagen Standard failed, trying Gemini Generator...", err2.message);
                   await delay(1000);
 
-                  // Priority 3: gemini-2.0-flash-exp (Fallback for images)
+                  // Priority 3: gemini-2.0-flash (Fallback for images)
                   try {
-                      const parts = [{ text: prompt }];
-                      console.log("Trying Fallback: gemini-2.0-flash-exp");
+                      const parts = [{ text: geminiFallbackPrompt }];
+                      console.log("Trying Fallback: gemini-2.0-flash");
                       const response = await ai.models.generateContent({
-                          model: 'gemini-2.0-flash-exp', 
+                          model: 'gemini-2.0-flash', 
                           contents: { parts: parts },
                           config: { safetySettings: SAFETY_SETTINGS as any },
                       });

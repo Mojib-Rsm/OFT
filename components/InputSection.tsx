@@ -29,7 +29,10 @@ import {
   DocEnhancerCategory,
   LegalCategory,
   ApplicationCategory,
-  CvCategory
+  CvCategory,
+  VisitingCardCategory,
+  BannerCategory,
+  InvitationCategory
 } from '../types';
 import { 
   Wand2, 
@@ -69,7 +72,10 @@ import {
   Languages,
   ScrollText,
   FileBadge,
-  UserCheck
+  UserCheck,
+  CreditCard,
+  Flag as FlagIcon,
+  Gift
 } from 'lucide-react';
 
 interface InputSectionProps {
@@ -150,6 +156,11 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [applicationCategory, setApplicationCategory] = usePersistedState<string>('oft_cat_app', ApplicationCategory.NID_FIX);
   const [cvCategory, setCvCategory] = usePersistedState<string>('oft_cat_cv', CvCategory.CORPORATE);
 
+  // Design Tools
+  const [visitingCardCategory, setVisitingCardCategory] = usePersistedState<string>('oft_cat_vcard', VisitingCardCategory.BUSINESS);
+  const [bannerCategory, setBannerCategory] = usePersistedState<string>('oft_cat_banner', BannerCategory.SHOP);
+  const [invitationCategory, setInvitationCategory] = usePersistedState<string>('oft_cat_invite', InvitationCategory.WEDDING);
+
   // Passport
   const [ppCountry, setPpCountry] = usePersistedState<string>('oft_pp_country', PassportCountry.BD);
   const [ppBg, setPpBg] = usePersistedState<string>('oft_pp_bg', PassportBg.WHITE);
@@ -161,6 +172,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [context, setContext] = usePersistedState<string>('oft_context', '');
   const [overlayText, setOverlayText] = usePersistedState<string>('oft_overlay_text', '');
   const [userInstruction, setUserInstruction] = usePersistedState<string>('oft_user_instruction', '');
+  
+  // Dynamic Form Data (Not persisted to keep forms clean on switch)
+  const [formData, setFormData] = useState<Record<string, string>>({});
   
   const [tone, setTone] = usePersistedState<string>('oft_tone', ContentTone.CASUAL);
   const [length, setLength] = usePersistedState<string>('oft_length', ContentLength.MEDIUM);
@@ -194,18 +208,28 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.LEGAL: return legalCategory;
       case ContentType.APPLICATION: return applicationCategory;
       case ContentType.CV_BIO: return cvCategory;
+      case ContentType.VISITING_CARD: return visitingCardCategory;
+      case ContentType.BANNER: return bannerCategory;
+      case ContentType.INVITATION: return invitationCategory;
       case ContentType.OTHER: return otherCategory;
       default: return '';
     }
   };
 
   const isPolitical = (category: string) => category.includes('রাজনৈতিক');
-  const isImageTool = (type: ContentType) => [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.DOC_ENHANCER].includes(type);
+  const isImageTool = (type: ContentType) => [
+      ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.DOC_ENHANCER,
+      ContentType.VISITING_CARD, ContentType.BANNER, ContentType.INVITATION
+  ].includes(type);
+
   const supportsImageUpload = (type: ContentType) => isImageTool(type) || type === ContentType.COMMENT || type === ContentType.IMG_TO_TEXT;
   const requiresImageUpload = (type: ContentType) => [ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.IMG_TO_TEXT, ContentType.DOC_ENHANCER].includes(type);
   const allowMultipleImages = activeTab === ContentType.PASSPORT && ppDress === PassportDress.COUPLE;
   const maxImages = allowMultipleImages ? 3 : 1;
-  const supportsOverlayText = (type: ContentType) => [ContentType.IMAGE, ContentType.THUMBNAIL].includes(type);
+  const supportsOverlayText = (type: ContentType) => [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.VISITING_CARD, ContentType.BANNER, ContentType.INVITATION].includes(type);
+  
+  // Tools that need specific inputs instead of generic context
+  const hasDynamicInputs = [ContentType.CV_BIO, ContentType.LEGAL, ContentType.APPLICATION, ContentType.EMAIL].includes(activeTab);
 
   const processFile = (file: File) => {
     if (file && file.type.startsWith('image/')) {
@@ -252,6 +276,10 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
 
   const removeImage = (index: number) => setSelectedImages(prev => prev.filter((_, i) => i !== index));
   const clearAllImages = () => { setSelectedImages([]); if (fileInputRef.current) fileInputRef.current.value = ''; };
+  
+  const handleFormChange = (key: string, value: string) => {
+    setFormData(prev => ({ ...prev, [key]: value }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -262,6 +290,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     if (activeTab === ContentType.THUMBNAIL) finalAspectRatio = ImageAspectRatio.LANDSCAPE;
     if (activeTab === ContentType.LOGO) finalAspectRatio = ImageAspectRatio.SQUARE;
     if (activeTab === ContentType.PASSPORT) finalAspectRatio = ImageAspectRatio.TALL;
+    if (activeTab === ContentType.VISITING_CARD) finalAspectRatio = ImageAspectRatio.LANDSCAPE;
+    if (activeTab === ContentType.BANNER) finalAspectRatio = ImageAspectRatio.WIDE; // Banner typically wide
+    if (activeTab === ContentType.INVITATION) finalAspectRatio = ImageAspectRatio.PORTRAIT;
 
     const passportConfig = activeTab === ContentType.PASSPORT ? {
       country: ppCountry,
@@ -270,8 +301,35 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       coupleDress: ppDress === PassportDress.COUPLE ? ppCoupleDress : undefined,
       aiRetouch: ppRetouch
     } : undefined;
+    
+    // Construct Context from Dynamic Fields if applicable
+    let finalContext = context;
+    
+    if (activeTab === ContentType.CV_BIO) {
+        finalContext = `
+          Name: ${formData.cvName || 'Not specified'}
+          Phone/Email: ${formData.cvContact || 'Not specified'}
+          Education: ${formData.cvEdu || 'Not specified'}
+          Experience: ${formData.cvExp || 'Not specified'}
+          Skills: ${formData.cvSkills || 'Not specified'}
+          Personal/Family Details: ${formData.cvDetails || 'Not specified'}
+        `;
+    } else if (activeTab === ContentType.LEGAL) {
+        finalContext = `
+          First Party (1st): ${formData.legal1st || 'Not specified'}
+          Second Party (2nd): ${formData.legal2nd || 'Not specified'}
+          Property/Money Details: ${formData.legalDetails || 'Not specified'}
+          Terms & Conditions: ${formData.legalTerms || 'Standard terms'}
+        `;
+    } else if (activeTab === ContentType.APPLICATION || activeTab === ContentType.EMAIL) {
+        finalContext = `
+          Recipient (To): ${formData.appTo || 'Authority'}
+          Subject: ${formData.appSubject || 'Application'}
+          Details/Reason: ${formData.appDetails || 'Not specified'}
+        `;
+    }
 
-    onGenerate(activeTab, category, context, tone, length, selectedParty, finalAspectRatio, selectedImages, passportConfig, overlayText, userInstruction, language);
+    onGenerate(activeTab, category, finalContext, tone, length, selectedParty, finalAspectRatio, selectedImages, passportConfig, overlayText, userInstruction, language);
   };
 
   const renderCategoryOptions = () => {
@@ -301,6 +359,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.LEGAL: categories = LegalCategory; currentValue = legalCategory; setter = setLegalCategory; break;
       case ContentType.APPLICATION: categories = ApplicationCategory; currentValue = applicationCategory; setter = setApplicationCategory; break;
       case ContentType.CV_BIO: categories = CvCategory; currentValue = cvCategory; setter = setCvCategory; break;
+      case ContentType.VISITING_CARD: categories = VisitingCardCategory; currentValue = visitingCardCategory; setter = setVisitingCardCategory; break;
+      case ContentType.BANNER: categories = BannerCategory; currentValue = bannerCategory; setter = setBannerCategory; break;
+      case ContentType.INVITATION: categories = InvitationCategory; currentValue = invitationCategory; setter = setInvitationCategory; break;
       case ContentType.OTHER: categories = OtherCategory; currentValue = otherCategory; setter = setOtherCategory; break;
     }
 
@@ -320,28 +381,49 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const getPlaceholder = () => {
     switch (activeTab) {
       case ContentType.POST: return "উদাহরণ: বৃষ্টির দিন, বন্ধুদের সাথে আড্ডা, বর্তমান পরিস্থিতি...";
-      case ContentType.COMMENT: return "পোস্টের বিষয় লিখুন...";
-      case ContentType.BIO: return "উদাহরণ: নাম আকাশ, ছাত্র, ফটোগ্রাফি...";
-      case ContentType.STORY: return "উদাহরণ: ট্রাফিক জ্যাম, ব্রেকিং নিউজ...";
-      case ContentType.NOTE: return "উদাহরণ: আজ খুব বৃষ্টি, বোরিং ক্লাস...";
-      case ContentType.SCRIPT: return "উদাহরণ: আইফোন রিভিউ, রান্নার টিপস...";
-      case ContentType.EMAIL: return "উদাহরণ: ৩ দিনের ছুটির আবেদন...";
-      case ContentType.AD_COPY: return "উদাহরণ: নতুন টি-শার্ট কালেকশন...";
-      case ContentType.POEM: return "উদাহরণ: বর্ষাকাল নিয়ে কবিতা...";
-      case ContentType.PDF_MAKER: return "উদাহরণ: আপনার যোগ্যতা, অভিজ্ঞতা...";
-      case ContentType.IMG_TO_TEXT: return "কোনো অতিরিক্ত নির্দেশনা থাকলে লিখুন...";
-      case ContentType.IMAGE: return "উদাহরণ: একটি বিড়াল সানগ্লাস পড়ে বাইক চালাচ্ছে...";
-      case ContentType.THUMBNAIL: return "উদাহরণ: 'How to make money online'...";
-      case ContentType.LOGO: return "উদাহরণ: একটি কফি শপের লোগো...";
-      case ContentType.PASSPORT: return "অতিরিক্ত নির্দেশনা...";
-      case ContentType.BG_REMOVE: return "কোন ধরণের ব্যাকগ্রাউন্ড চান...";
-      case ContentType.DOC_ENHANCER: return "অতিরিক্ত নির্দেশনা (যেমন: লেখাকে আরও কালো করো)...";
-      case ContentType.LEGAL: return "উদাহরণ: বাসা ভাড়া, নাম, জামানত, শর্তাবলী...";
-      case ContentType.APPLICATION: return "উদাহরণ: আইডি কার্ডে নামের বানান ভুল সংশোধনের জন্য...";
-      case ContentType.CV_BIO: return "উদাহরণ: আপনার নাম, শিক্ষা, অভিজ্ঞতা, স্কিল...";
-      case ContentType.OTHER: return "উদাহরণ: বসের কাছে ছুটির আবেদন...";
-      default: return "";
+      case ContentType.VISITING_CARD: return "উদাহরণ: নাম, পদবী, মোবাইল, ঠিকানা...";
+      case ContentType.BANNER: return "উদাহরণ: দোকানের নাম, অফার, স্থান...";
+      case ContentType.INVITATION: return "উদাহরণ: পাত্র-পাত্রীর নাম, তারিখ, স্থান...";
+      default: return "বিষয়বস্তু / তথ্য লিখুন...";
     }
+  };
+  
+  const renderDynamicInputs = () => {
+    if (activeTab === ContentType.CV_BIO) {
+        return (
+           <div className="space-y-3 animate-in fade-in">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                 <input className="input-field" placeholder="আপনার নাম" onChange={e => handleFormChange('cvName', e.target.value)} />
+                 <input className="input-field" placeholder="মোবাইল / ইমেইল" onChange={e => handleFormChange('cvContact', e.target.value)} />
+              </div>
+              <input className="input-field" placeholder="শিক্ষাগত যোগ্যতা (সংক্ষেপে)" onChange={e => handleFormChange('cvEdu', e.target.value)} />
+              <textarea className="input-field h-20" placeholder="অভিজ্ঞতা ও স্কিল (Experience & Skills)" onChange={e => handleFormChange('cvExp', e.target.value)} />
+              <textarea className="input-field h-20" placeholder="পারিবারিক / ব্যক্তিগত তথ্য (বায়োডাটার জন্য)" onChange={e => handleFormChange('cvDetails', e.target.value)} />
+           </div>
+        );
+    }
+    if (activeTab === ContentType.LEGAL) {
+        return (
+           <div className="space-y-3 animate-in fade-in">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                 <input className="input-field" placeholder="১ম পক্ষ (মালিক/দাতা)" onChange={e => handleFormChange('legal1st', e.target.value)} />
+                 <input className="input-field" placeholder="২য় পক্ষ (ভাড়াটিয়া/গ্রহীতা)" onChange={e => handleFormChange('legal2nd', e.target.value)} />
+              </div>
+              <textarea className="input-field h-20" placeholder="জমি / ফ্লাট / টাকার বিবরণ" onChange={e => handleFormChange('legalDetails', e.target.value)} />
+              <textarea className="input-field h-24" placeholder="শর্তাবলী (ভাড়া, মেয়াদ, জামানত ইত্যাদি)" onChange={e => handleFormChange('legalTerms', e.target.value)} />
+           </div>
+        );
+    }
+    if (activeTab === ContentType.APPLICATION || activeTab === ContentType.EMAIL) {
+        return (
+           <div className="space-y-3 animate-in fade-in">
+              <input className="input-field" placeholder="প্রাপক (বরাবর), যেমন: প্রধান শিক্ষক / ম্যানেজার" onChange={e => handleFormChange('appTo', e.target.value)} />
+              <input className="input-field" placeholder="বিষয় (Subject)" onChange={e => handleFormChange('appSubject', e.target.value)} />
+              <textarea className="input-field h-32" placeholder="মূল বিবরণ (কি কারণে আবেদন করছেন?)" onChange={e => handleFormChange('appDetails', e.target.value)} />
+           </div>
+        );
+    }
+    return null;
   };
 
   const getImageUploadLabel = () => {
@@ -358,7 +440,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const TabButton = ({ type, icon: Icon, label }: { type: ContentType, icon: any, label: string }) => (
     <button
       type="button"
-      onClick={() => { setActiveTab(type); if (!supportsImageUpload(type)) clearAllImages(); }}
+      onClick={() => { setActiveTab(type); if (!supportsImageUpload(type)) clearAllImages(); setFormData({}); }}
       className={`relative group flex flex-row items-center justify-center px-4 py-2.5 rounded-xl transition-all duration-200 font-semibold text-sm font-bangla whitespace-nowrap flex-shrink-0 ${
         activeTab === type ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20 ring-1 ring-indigo-600' : 'bg-white text-slate-600 hover:bg-slate-50 hover:text-indigo-600 ring-1 ring-slate-200'
       }`}
@@ -381,29 +463,33 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
 
       <div className="p-4 sm:p-6 bg-slate-50/50 border-b border-slate-100">
         <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide snap-x">
+          {/* Shop */}
           <TabButton type={ContentType.DOC_ENHANCER} icon={ScanText} label="ডকুমেন্ট ফিক্সার" />
-          <TabButton type={ContentType.LEGAL} icon={ScrollText} label="চুক্তি/স্ট্যাম্প" />
-          <TabButton type={ContentType.CV_BIO} icon={UserCheck} label="সিভি/বায়োডাটা" />
-          <TabButton type={ContentType.APPLICATION} icon={FileBadge} label="আবেদন" />
-          <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
-          <TabButton type={ContentType.COMMENT} icon={MessageSquare} label="কমেন্ট" />
-          <TabButton type={ContentType.POST} icon={FileText} label="পোস্ট" />
-          <TabButton type={ContentType.STORY} icon={Zap} label="স্টোরি" />
-          <TabButton type={ContentType.BIO} icon={User} label="বায়ো" />
-          <TabButton type={ContentType.POEM} icon={Feather} label="কবিতা" />
-          <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
-          <TabButton type={ContentType.NOTE} icon={StickyNote} label="নোট" />
-          <TabButton type={ContentType.SCRIPT} icon={Video} label="স্ক্রিপ্ট" />
-          <TabButton type={ContentType.EMAIL} icon={Mail} label="ইমেইল" />
-          <TabButton type={ContentType.AD_COPY} icon={Megaphone} label="অ্যাড" />
+          <TabButton type={ContentType.PASSPORT} icon={UserSquare} label="পাসপোর্ট" />
           <TabButton type={ContentType.PDF_MAKER} icon={FileDown} label="PDF মেকার" />
           <TabButton type={ContentType.IMG_TO_TEXT} icon={ScanText} label="OCR" />
           <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
-          <TabButton type={ContentType.IMAGE} icon={ImageIcon} label="ইমেজ" />
-          <TabButton type={ContentType.THUMBNAIL} icon={Crop} label="থাম্বনেইল" />
+          {/* Docs */}
+          <TabButton type={ContentType.CV_BIO} icon={UserCheck} label="সিভি/বায়োডাটা" />
+          <TabButton type={ContentType.APPLICATION} icon={FileBadge} label="আবেদন" />
+          <TabButton type={ContentType.LEGAL} icon={ScrollText} label="চুক্তি/স্ট্যাম্প" />
+          <TabButton type={ContentType.EMAIL} icon={Mail} label="ইমেইল" />
+          <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
+          {/* Graphics */}
+          <TabButton type={ContentType.VISITING_CARD} icon={CreditCard} label="ভিজিটিং কার্ড" />
+          <TabButton type={ContentType.BANNER} icon={FlagIcon} label="ব্যানার" />
+          <TabButton type={ContentType.INVITATION} icon={Gift} label="ইনভাইটেশন" />
           <TabButton type={ContentType.LOGO} icon={Stamp} label="লোগো" />
-          <TabButton type={ContentType.PASSPORT} icon={UserSquare} label="পাসপোর্ট" />
+          <TabButton type={ContentType.THUMBNAIL} icon={Crop} label="থাম্বনেইল" />
+          <TabButton type={ContentType.IMAGE} icon={ImageIcon} label="এআই ইমেজ" />
           <TabButton type={ContentType.BG_REMOVE} icon={Eraser} label="ব্যাকগ্রাউন্ড" />
+          <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
+          {/* Social */}
+          <TabButton type={ContentType.POST} icon={FileText} label="পোস্ট" />
+          <TabButton type={ContentType.COMMENT} icon={MessageSquare} label="কমেন্ট" />
+          <TabButton type={ContentType.STORY} icon={Zap} label="স্টোরি" />
+          <TabButton type={ContentType.BIO} icon={User} label="বায়ো" />
+          <TabButton type={ContentType.SCRIPT} icon={Video} label="স্ক্রিপ্ট" />
           <TabButton type={ContentType.OTHER} icon={MoreHorizontal} label="অন্যান্য" />
         </div>
       </div>
@@ -504,17 +590,24 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
            </div>
         )}
 
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
-            {activeTab === ContentType.IMG_TO_TEXT ? "নির্দেশনা (অপশনাল)" : activeTab === ContentType.IMAGE || activeTab === ContentType.THUMBNAIL || activeTab === ContentType.LOGO ? "ইমেজ প্রম্পট / বিষয়বস্তু" : "বিষয়বস্তু / প্রসঙ্গ / তথ্য"}
-          </label>
-          <textarea
-            value={context}
-            onChange={(e) => setContext(e.target.value)}
-            placeholder={getPlaceholder()}
-            className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 block p-4 transition-all resize-none font-bangla h-28 hover:bg-white"
-          />
-        </div>
+        {hasDynamicInputs ? (
+            <>
+               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">তথ্য / বিবরণ</label>
+               {renderDynamicInputs()}
+            </>
+        ) : (
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
+                {activeTab === ContentType.IMG_TO_TEXT ? "নির্দেশনা (অপশনাল)" : activeTab === ContentType.IMAGE || activeTab === ContentType.THUMBNAIL || activeTab === ContentType.LOGO || activeTab === ContentType.VISITING_CARD || activeTab === ContentType.BANNER || activeTab === ContentType.INVITATION ? "ইমেজ প্রম্পট / বিষয়বস্তু / লেখা" : "বিষয়বস্তু / প্রসঙ্গ / তথ্য"}
+              </label>
+              <textarea
+                value={context}
+                onChange={(e) => setContext(e.target.value)}
+                placeholder={getPlaceholder()}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 block p-4 transition-all resize-none font-bangla h-28 hover:bg-white"
+              />
+            </div>
+        )}
 
         {supportsOverlayText(activeTab) && (
            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
@@ -523,7 +616,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
                 type="text"
                 value={overlayText}
                 onChange={(e) => setOverlayText(e.target.value)}
-                placeholder="যেমন: বৃষ্টির দিন, ব্রেকিং নিউজ, অফার চলছে..."
+                placeholder="যেমন: নাম, ঠিকানা, অফার..."
                 className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 block p-3.5 transition-all font-bangla hover:bg-white"
              />
              <p className="text-[10px] text-slate-400 font-bangla ml-1">বাংলা লেখা ইমেজে ভুল করতে পারে, তাই এখানে লিখলে সেটি ইমেজের উপর সুন্দরভাবে বসিয়ে দেওয়া হবে।</p>
@@ -588,7 +681,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           </div>
         )}
 
-        {(activeTab === ContentType.IMAGE || activeTab === ContentType.THUMBNAIL || activeTab === ContentType.LOGO) && (
+        {isImageTool(activeTab) && (
             <div className="space-y-2">
                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1 flex items-center gap-1"><Ratio size={12} /> অ্যাসপেক্ট রেশিও (Aspect Ratio)</label>
                <div className="flex gap-2 flex-wrap">

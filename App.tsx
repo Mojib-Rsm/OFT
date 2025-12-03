@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import InputSection from './components/InputSection';
@@ -56,9 +55,23 @@ const App: React.FC = () => {
     try {
       let generatedOptions: string[] = [];
 
+      // DEFINING IMAGE TOOLS: explicitly list all tools that should produce IMAGES
+      const imageTools = [
+        ContentType.IMAGE, 
+        ContentType.THUMBNAIL, 
+        ContentType.LOGO, 
+        ContentType.PASSPORT, 
+        ContentType.BG_REMOVE,
+        ContentType.DOC_ENHANCER,     // Added
+        ContentType.VISITING_CARD,    // Added
+        ContentType.BANNER,           // Added
+        ContentType.INVITATION        // Added
+      ];
+
       // Check if it's an image tool
-      if ([ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type)) {
-        generatedOptions = await generateImage(category, context, aspectRatio, inputImages, passportConfig, overlayText);
+      if (imageTools.includes(type)) {
+        // Now passing 'type' as the first argument to ensure the service knows exactly what tool it is
+        generatedOptions = await generateImage(type, category, context, aspectRatio, inputImages, passportConfig, overlayText);
       } else {
         // Pass inputImages for multimodal text generation (e.g. Screenshot Comments)
         generatedOptions = await generateBanglaContent(type, category, context, tone, length, party, userInstruction, inputImages);
@@ -67,7 +80,8 @@ const App: React.FC = () => {
       setResults(generatedOptions);
 
       // Prepare data for history
-      const historyResults = [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type)
+      const isImageResult = imageTools.includes(type);
+      const historyResults = isImageResult
         ? ['[Image Generated] - (ইমেজ সেভ করা হয়নি, স্টোরেজ বাঁচানোর জন্য)'] 
         : generatedOptions;
 
@@ -76,7 +90,7 @@ const App: React.FC = () => {
         timestamp: Date.now(),
         type,
         category,
-        context: [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE].includes(type) ? `${context} (${aspectRatio || 'auto'})` : context,
+        context: isImageResult ? `${context} (${aspectRatio || 'auto'})` : context,
         tone,
         length,
         party,
@@ -87,10 +101,6 @@ const App: React.FC = () => {
         overlayText,
         userInstruction
       };
-      
-      // Note: We are saving base64 images to history. This might exceed LocalStorage limits quickly. 
-      // Ideally, in a real app, upload these to a server and store URLs.
-      // For this demo, we might want to strip images from history if they are too large, or just keep them.
       
       setHistory(prev => [newItem, ...prev]);
 

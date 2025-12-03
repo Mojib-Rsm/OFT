@@ -25,7 +25,11 @@ import {
   Printer,
   FileBadge,
   ScrollText,
-  UserCheck
+  UserCheck,
+  CreditCard,
+  Flag,
+  Gift,
+  Files
 } from 'lucide-react';
 import { ContentType } from '../types';
 
@@ -38,70 +42,70 @@ const ToolGrid: React.FC<ToolGridProps> = ({ onSelectTool }) => {
     {
       id: 'shop',
       title: 'কম্পিউটার দোকান ও প্রিন্টিং',
-      subtitle: 'ডকুমেন্ট, সিভি, চুক্তিপত্র ও আবেদন',
+      subtitle: 'স্ক্যান, ফটো, পিডিএফ ও টাইপিং',
       icon: Printer,
       gradient: 'from-teal-500 to-emerald-500',
       bg: 'bg-teal-50',
       border: 'border-teal-100',
       text: 'text-teal-600',
       tools: [
-        { type: ContentType.DOC_ENHANCER, label: 'ডকুমেন্ট ফিক্সার', icon: ScanText, desc: 'ছবি থেকে ক্লিয়ার ডকুমেন্ট (ফটোকপি)' },
-        { type: ContentType.CV_BIO, label: 'সিভি / বায়োডাটা', icon: UserCheck, desc: 'চাকরি ও বিয়ের বায়োডাটা' },
-        { type: ContentType.LEGAL, label: 'চুক্তি / স্ট্যাম্প', icon: ScrollText, desc: 'বাসা ভাড়া, জমি ও হলফনামা' },
-        { type: ContentType.APPLICATION, label: 'অফিসিয়াল আবেদন', icon: FileBadge, desc: 'NID, ব্যাংক ও সরকারি আবেদন' },
+        { type: ContentType.DOC_ENHANCER, label: 'ডকুমেন্ট ফিক্সার', icon: ScanText, desc: 'স্ক্যান ও ফটোকপি ক্লিনার' },
+        { type: ContentType.PASSPORT, label: 'পাসপোর্ট ফটো', icon: UserSquare, desc: 'ছবি তোলা ও সাইজ করা' },
+        { type: ContentType.PDF_MAKER, label: 'PDF মেকার', icon: FileDown, desc: 'ডকুমেন্ট তৈরি ও কনভার্ট' },
+        { type: ContentType.IMG_TO_TEXT, label: 'টাইপিং / OCR', icon: Files, desc: 'ছবি থেকে লেখা (OCR)' },
       ]
     },
     {
-      id: 'image',
-      title: 'ইমেজ ও গ্রাফিক্স স্টুডিও',
-      subtitle: 'এআই দিয়ে ছবি, লোগো ও এডিটিং',
-      icon: Palette,
-      gradient: 'from-purple-500 to-pink-500',
-      bg: 'bg-purple-50',
-      border: 'border-purple-100',
-      text: 'text-purple-600',
-      tools: [
-        { type: ContentType.IMAGE, label: 'এআই ইমেজ', icon: Sparkles, desc: 'টেক্সট থেকে ছবি তৈরি' },
-        { type: ContentType.THUMBNAIL, label: 'থাম্বনেইল মেকার', icon: Crop, desc: 'ইউটিউব ও ফেসবুকের জন্য' },
-        { type: ContentType.LOGO, label: 'লোগো ডিজাইন', icon: Stamp, desc: 'ব্র্যান্ড লোগো আইডিয়া' },
-        { type: ContentType.PASSPORT, label: 'পাসপোর্ট ফটো', icon: UserSquare, desc: 'অফিসিয়াল ছবির স্টাইল' },
-        { type: ContentType.BG_REMOVE, label: 'ব্যাকগ্রাউন্ড এডিটর', icon: Eraser, desc: 'ব্যাকগ্রাউন্ড পরিবর্তন' },
-      ]
-    },
-    {
-      id: 'social',
-      title: 'সোশ্যাল ও ক্রিয়েটিভ',
-      subtitle: 'সোশ্যাল মিডিয়া রাইটিং ও সৃজনশীল লেখা',
-      icon: PenTool,
-      gradient: 'from-blue-500 to-cyan-400',
-      bg: 'bg-blue-50',
-      border: 'border-blue-100',
-      text: 'text-blue-600',
-      tools: [
-        { type: ContentType.POST, label: 'পোস্ট / ক্যাপশন', icon: FileText, desc: 'স্মার্ট ও আকর্ষণীয় পোস্ট' },
-        { type: ContentType.COMMENT, label: 'কমেন্ট জেনারেটর', icon: MessageSquare, desc: 'উপযুক্ত রিপ্লাই ও কমেন্ট' },
-        { type: ContentType.STORY, label: 'স্টোরি / স্ট্যাটাস', icon: Zap, desc: 'ছোট ও পাঞ্চি স্ট্যাটাস' },
-        { type: ContentType.BIO, label: 'প্রোফাইল বায়ো', icon: User, desc: 'স্টাইলিশ প্রোফাইল বায়ো' },
-        { type: ContentType.POEM, label: 'কবিতা / ছড়া', icon: Feather, desc: 'ছন্দ ও কবিতার লাইন' },
-        { type: ContentType.NOTE, label: 'শর্ট নোট (Notes)', icon: StickyNote, desc: '৬০ অক্ষরের নোট' },
-      ]
-    },
-    {
-      id: 'business',
-      title: 'বিজনেজ ও প্রফেশনাল',
-      subtitle: 'ইমেইল, মার্কেটিং ও প্রোডাক্টিভিটি',
+      id: 'docs',
+      title: 'ডকুমেন্ট ও আবেদন',
+      subtitle: 'সিভি, চুক্তিপত্র, আবেদন ও ইমেইল',
       icon: Briefcase,
       gradient: 'from-amber-500 to-orange-500',
       bg: 'bg-amber-50',
       border: 'border-amber-100',
       text: 'text-amber-600',
       tools: [
-        { type: ContentType.EMAIL, label: 'ইমেইল / লেটার', icon: Mail, desc: 'ফরমাল ইমেইল ও আবেদন' },
-        { type: ContentType.AD_COPY, label: 'বিজ্ঞাপন / অ্যাড', icon: Megaphone, desc: 'ফেসবুক অ্যাড ও মার্কেটিং' },
-        { type: ContentType.SCRIPT, label: 'ভিডিও স্ক্রিপ্ট', icon: Video, desc: 'রিলস ও ভিডিওর প্ল্যান' },
-        { type: ContentType.PDF_MAKER, label: 'PDF মেকার', icon: FileDown, desc: 'সিভি, রিপোর্ট ও ডক' },
-        { type: ContentType.IMG_TO_TEXT, label: 'ইমেজ টু টেক্সট', icon: ScanText, desc: 'ইমেজ থেকে লেখা (OCR)' },
-        { type: ContentType.OTHER, label: 'অন্যান্য টুলস', icon: MoreHorizontal, desc: 'এসএমএস, উইশ এবং অন্যান্য' },
+        { type: ContentType.CV_BIO, label: 'সিভি / বায়োডাটা', icon: UserCheck, desc: 'চাকরি ও বিয়ের বায়োডাটা' },
+        { type: ContentType.LEGAL, label: 'চুক্তি / স্ট্যাম্প', icon: ScrollText, desc: 'বাসা ভাড়া ও জমি চুক্তি' },
+        { type: ContentType.APPLICATION, label: 'অফিসিয়াল আবেদন', icon: FileBadge, desc: 'NID, ব্যাংক ও সরকারি' },
+        { type: ContentType.EMAIL, label: 'ইমেইল / লেটার', icon: Mail, desc: 'ফরমাল ইমেইল ও চিঠি' },
+      ]
+    },
+    {
+      id: 'design',
+      title: 'গ্রাফিক্স ও ডিজাইন',
+      subtitle: 'ব্যানার, কার্ড, লোগো ও এডিটিং',
+      icon: Palette,
+      gradient: 'from-purple-500 to-pink-500',
+      bg: 'bg-purple-50',
+      border: 'border-purple-100',
+      text: 'text-purple-600',
+      tools: [
+        { type: ContentType.VISITING_CARD, label: 'ভিজিটিং কার্ড', icon: CreditCard, desc: 'বিজনেস ও আইডি কার্ড' },
+        { type: ContentType.BANNER, label: 'ব্যানার / ফ্লেক্স', icon: Flag, desc: 'দোকান ও নির্বাচনী ব্যানার' },
+        { type: ContentType.INVITATION, label: 'ইনভাইটেশন কার্ড', icon: Gift, desc: 'বিয়ে ও জন্মদিন' },
+        { type: ContentType.LOGO, label: 'লোগো ডিজাইন', icon: Stamp, desc: 'লোগো ও আইকন' },
+        { type: ContentType.THUMBNAIL, label: 'থাম্বনেইল', icon: Crop, desc: 'ইউটিউব থাম্বনেইল' },
+        { type: ContentType.IMAGE, label: 'এআই ইমেজ', icon: Sparkles, desc: 'যেকোনো ছবি তৈরি' },
+        { type: ContentType.BG_REMOVE, label: 'ব্যাকগ্রাউন্ড', icon: Eraser, desc: 'ব্যাকগ্রাউন্ড পরিবর্তন' },
+      ]
+    },
+    {
+      id: 'social',
+      title: 'সোশ্যাল ও ক্রিয়েটিভ',
+      subtitle: 'পোস্ট, ক্যাপশন ও মার্কেটিং',
+      icon: PenTool,
+      gradient: 'from-blue-500 to-cyan-400',
+      bg: 'bg-blue-50',
+      border: 'border-blue-100',
+      text: 'text-blue-600',
+      tools: [
+        { type: ContentType.POST, label: 'পোস্ট / ক্যাপশন', icon: FileText, desc: 'সোশ্যাল মিডিয়া পোস্ট' },
+        { type: ContentType.AD_COPY, label: 'বিজ্ঞাপন / অ্যাড', icon: Megaphone, desc: 'মার্কেটিং কপি' },
+        { type: ContentType.COMMENT, label: 'কমেন্ট রিপ্লাই', icon: MessageSquare, desc: 'স্মার্ট রিপ্লাই' },
+        { type: ContentType.STORY, label: 'স্টোরি / স্ট্যাটাস', icon: Zap, desc: 'ছোট স্ট্যাটাস' },
+        { type: ContentType.SCRIPT, label: 'ভিডিও স্ক্রিপ্ট', icon: Video, desc: 'ভিডিও আইডিয়া' },
+        { type: ContentType.OTHER, label: 'অন্যান্য', icon: MoreHorizontal, desc: 'এসএমএস ও অন্যান্য' },
       ]
     }
   ];
