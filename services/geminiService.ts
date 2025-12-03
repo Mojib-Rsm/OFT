@@ -169,7 +169,7 @@ export const generateBanglaContent = async (
     const isOCR = type === ContentType.IMG_TO_TEXT;
     
     try {
-       // Primary: gemini-2.5-flash (Standard New Flash)
+       // Primary: gemini-2.5-flash
        // For OCR, try gemini-3-pro first for best vision
        const primaryModel = isOCR ? "gemini-3-pro" : "gemini-2.5-flash";
        console.log(`Trying Primary Model: ${primaryModel}`);
@@ -185,7 +185,7 @@ export const generateBanglaContent = async (
        await delay(1000);
 
        try {
-          // Secondary: gemini-2.0-flash (Previous Flash)
+          // Secondary: gemini-2.0-flash
           // For OCR fallback: gemini-2.5-flash
           const secondaryModel = isOCR ? "gemini-2.5-flash" : "gemini-2.0-flash";
           console.log(`Trying Secondary Model: ${secondaryModel}`);
@@ -318,13 +318,13 @@ export const generateImage = async (
          };
 
          try {
-             // Primary: gemini-2.5-flash-preview-image (Specific for editing)
-             return await tryModel('gemini-2.5-flash-preview-image');
+             // Primary Editing Model: gemini-2.0-flash (Stable multimodal)
+             return await tryModel('gemini-2.0-flash');
          } catch (e) {
              console.warn("Primary editing model failed, trying fallback...", e);
              await delay(1000);
-             // Secondary: gemini-3-pro-image
-             return await tryModel('gemini-3-pro-image');
+             // Secondary: gemini-2.5-flash
+             return await tryModel('gemini-2.5-flash');
          }
       });
   }
@@ -370,11 +370,11 @@ export const generateImage = async (
                   console.warn("Imagen Standard failed, trying Gemini Content Generation.", imagen2Error.message);
                   await delay(1000);
 
-                  // Tertiary: gemini-2.5-flash-preview-image (Via generateContent)
+                  // Tertiary: gemini-2.0-flash (Via generateContent)
                   const parts = [{ text: prompt }];
-                  console.log("Trying Fallback Model: gemini-2.5-flash-preview-image");
+                  console.log("Trying Fallback Model: gemini-2.0-flash");
                   const response = await ai.models.generateContent({
-                      model: 'gemini-2.5-flash-preview-image', 
+                      model: 'gemini-2.0-flash', 
                       contents: { parts: parts },
                       config: { safetySettings: SAFETY_SETTINGS as any },
                   });
