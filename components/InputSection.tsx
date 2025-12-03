@@ -83,9 +83,34 @@ const POLITICAL_PARTIES = [
   "বিরোধী দল"
 ];
 
+// Custom hook to persist state to localStorage
+function usePersistedState<T>(key: string, defaultValue: T) {
+  const [state, setState] = useState<T>(() => {
+    try {
+      const storedValue = localStorage.getItem(key);
+      if (storedValue !== null) {
+        return JSON.parse(storedValue);
+      }
+    } catch (e) {
+      console.warn(`Error reading localStorage key "${key}":`, e);
+    }
+    return defaultValue;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch (e) {
+      console.warn(`Error writing localStorage key "${key}":`, e);
+    }
+  }, [key, state]);
+
+  return [state, setState] as const;
+}
+
 const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGenerate, isLoading }) => {
   const [activeTab, setActiveTab] = useState<ContentType>(initialTab || ContentType.COMMENT);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = usePersistedState<boolean>('oft_show_advanced', false);
   
   // Update active tab if initialTab prop changes
   useEffect(() => {
@@ -94,40 +119,42 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     }
   }, [initialTab]);
 
-  const [postCategory, setPostCategory] = useState<string>(PostCategory.FUNNY);
-  const [commentCategory, setCommentCategory] = useState<string>(CommentCategory.PRAISE);
-  const [bioCategory, setBioCategory] = useState<string>(BioCategory.ATTITUDE);
-  const [storyCategory, setStoryCategory] = useState<string>(StoryCategory.DAILY);
-  const [noteCategory, setNoteCategory] = useState<string>(NoteCategory.RANDOM);
-  const [scriptCategory, setScriptCategory] = useState<string>(ScriptCategory.REELS);
-  const [emailCategory, setEmailCategory] = useState<string>(EmailCategory.LEAVE);
-  const [adCopyCategory, setAdCopyCategory] = useState<string>(AdCopyCategory.FB_AD);
-  const [poemCategory, setPoemCategory] = useState<string>(PoemCategory.ROMANTIC);
-  const [pdfCategory, setPdfCategory] = useState<string>(PdfCategory.APPLICATION);
-  const [imgToTextCategory, setImgToTextCategory] = useState<string>(ImgToTextCategory.DOCUMENT);
-  const [imageCategory, setImageCategory] = useState<string>(ImageCategory.REALISTIC);
-  const [thumbnailCategory, setThumbnailCategory] = useState<string>(ThumbnailCategory.YOUTUBE);
-  const [logoCategory, setLogoCategory] = useState<string>(LogoCategory.MINIMALIST);
-  const [bgRemoveCategory, setBgRemoveCategory] = useState<string>(BgRemoveCategory.WHITE);
-  const [otherCategory, setOtherCategory] = useState<string>(OtherCategory.BIRTHDAY);
+  // Persisted States for Categories
+  const [postCategory, setPostCategory] = usePersistedState<string>('oft_cat_post', PostCategory.FUNNY);
+  const [commentCategory, setCommentCategory] = usePersistedState<string>('oft_cat_comment', CommentCategory.PRAISE);
+  const [bioCategory, setBioCategory] = usePersistedState<string>('oft_cat_bio', BioCategory.ATTITUDE);
+  const [storyCategory, setStoryCategory] = usePersistedState<string>('oft_cat_story', StoryCategory.DAILY);
+  const [noteCategory, setNoteCategory] = usePersistedState<string>('oft_cat_note', NoteCategory.RANDOM);
+  const [scriptCategory, setScriptCategory] = usePersistedState<string>('oft_cat_script', ScriptCategory.REELS);
+  const [emailCategory, setEmailCategory] = usePersistedState<string>('oft_cat_email', EmailCategory.LEAVE);
+  const [adCopyCategory, setAdCopyCategory] = usePersistedState<string>('oft_cat_ad', AdCopyCategory.FB_AD);
+  const [poemCategory, setPoemCategory] = usePersistedState<string>('oft_cat_poem', PoemCategory.ROMANTIC);
+  const [pdfCategory, setPdfCategory] = usePersistedState<string>('oft_cat_pdf', PdfCategory.APPLICATION);
+  const [imgToTextCategory, setImgToTextCategory] = usePersistedState<string>('oft_cat_ocr', ImgToTextCategory.DOCUMENT);
+  const [imageCategory, setImageCategory] = usePersistedState<string>('oft_cat_image', ImageCategory.REALISTIC);
+  const [thumbnailCategory, setThumbnailCategory] = usePersistedState<string>('oft_cat_thumbnail', ThumbnailCategory.YOUTUBE);
+  const [logoCategory, setLogoCategory] = usePersistedState<string>('oft_cat_logo', LogoCategory.MINIMALIST);
+  const [bgRemoveCategory, setBgRemoveCategory] = usePersistedState<string>('oft_cat_bg', BgRemoveCategory.WHITE);
+  const [otherCategory, setOtherCategory] = usePersistedState<string>('oft_cat_other', OtherCategory.BIRTHDAY);
   
-  // Passport Specific States
-  const [ppCountry, setPpCountry] = useState<string>(PassportCountry.BD);
-  const [ppBg, setPpBg] = useState<string>(PassportBg.WHITE);
-  const [ppDress, setPpDress] = useState<string>(PassportDress.ORIGINAL);
-  const [ppCoupleDress, setPpCoupleDress] = useState<string>(CoupleDress.ORIGINAL);
-  const [ppRetouch, setPpRetouch] = useState<boolean>(true);
+  // Persisted Passport Specific States
+  const [ppCountry, setPpCountry] = usePersistedState<string>('oft_pp_country', PassportCountry.BD);
+  const [ppBg, setPpBg] = usePersistedState<string>('oft_pp_bg', PassportBg.WHITE);
+  const [ppDress, setPpDress] = usePersistedState<string>('oft_pp_dress', PassportDress.ORIGINAL);
+  const [ppCoupleDress, setPpCoupleDress] = usePersistedState<string>('oft_pp_couple_dress', CoupleDress.ORIGINAL);
+  const [ppRetouch, setPpRetouch] = usePersistedState<boolean>('oft_pp_retouch', true);
 
-  const [context, setContext] = useState<string>('');
-  const [overlayText, setOverlayText] = useState<string>('');
-  const [userInstruction, setUserInstruction] = useState<string>(''); // New field for comment instructions
+  // Persisted Common Inputs
+  const [context, setContext] = usePersistedState<string>('oft_context', '');
+  const [overlayText, setOverlayText] = usePersistedState<string>('oft_overlay_text', '');
+  const [userInstruction, setUserInstruction] = usePersistedState<string>('oft_user_instruction', '');
   
-  const [tone, setTone] = useState<string>(ContentTone.CASUAL);
-  const [length, setLength] = useState<string>(ContentLength.MEDIUM);
-  const [aspectRatio, setAspectRatio] = useState<string>(ImageAspectRatio.SQUARE);
-  const [party, setParty] = useState<string>('');
+  const [tone, setTone] = usePersistedState<string>('oft_tone', ContentTone.CASUAL);
+  const [length, setLength] = usePersistedState<string>('oft_length', ContentLength.MEDIUM);
+  const [aspectRatio, setAspectRatio] = usePersistedState<string>('oft_aspect_ratio', ImageAspectRatio.SQUARE);
+  const [party, setParty] = usePersistedState<string>('oft_party', '');
   
-  // Change state to array to support multiple images
+  // Images are NOT persisted to localStorage due to size constraints
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -354,8 +381,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       type="button"
       onClick={() => {
         setActiveTab(type);
-        setOverlayText('');
-        setUserInstruction('');
+        // Do not clear inputs on tab switch to keep state sticky, except maybe clearing images if not supported
         if (!supportsImageUpload(type)) clearAllImages();
       }}
       className={`relative group flex flex-row items-center justify-center px-4 py-2.5 rounded-xl transition-all duration-200 font-semibold text-sm font-bangla whitespace-nowrap flex-shrink-0 ${

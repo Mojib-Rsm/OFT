@@ -5,7 +5,7 @@ import InputSection from './components/InputSection';
 import ResultCard from './components/ResultCard';
 import HistoryPage from './components/HistoryPage';
 import ToolGrid from './components/ToolGrid';
-import ErrorPopup from './components/ErrorPopup';
+import Toast from './components/Toast';
 import { ContentType, HistoryItem } from './types';
 import { generateBanglaContent, generateImage } from './services/geminiService';
 import { Sparkles, RefreshCcw } from 'lucide-react';
@@ -140,9 +140,9 @@ const App: React.FC = () => {
       <div className="fixed top-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-200/20 rounded-full blur-3xl -z-10 animate-pulse pointer-events-none"></div>
       <div className="fixed bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-200/20 rounded-full blur-3xl -z-10 animate-pulse delay-700 pointer-events-none"></div>
 
-      {/* Global Error Popup */}
+      {/* Toast Notification for Errors */}
       {error && (
-        <ErrorPopup message={error} onClose={() => setError(null)} />
+        <Toast message={error} onClose={() => setError(null)} />
       )}
 
       <Header currentView={view} onViewChange={handleViewChange} />
