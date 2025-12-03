@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { ContentType, PassportConfig } from "../types";
 
@@ -26,6 +27,8 @@ const API_KEYS = [
   singleGeminiKey
 ].filter((key, index, self) => !!key && key.length > 0 && self.indexOf(key) === index); // Unique & non-empty
 
+console.log(`Loaded ${API_KEYS.length} API Keys for rotation.`);
+
 // Safety Settings to prevent blocking on harmless edits (like passport photos)
 const SAFETY_SETTINGS = [
   { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
@@ -48,10 +51,12 @@ const makeGeminiRequest = async <T>(
 
   for (const apiKey of API_KEYS) {
     try {
+      // console.log(`Attempting with Key ending in ...${apiKey.slice(-4)}`);
       const ai = new GoogleGenAI({ apiKey });
       return await operation(ai);
     } catch (error: any) {
-      console.warn(`Gemini API Key ending in ...${apiKey.slice(-4)} failed. Trying next key. Reason:`, error.message);
+      console.warn(`Gemini API Key ending in ...${apiKey.slice(-4)} failed. Trying next key.`);
+      if (error.message) console.warn(`Error details: ${error.message}`);
       lastError = error;
       continue;
     }
@@ -144,10 +149,8 @@ export const generateBanglaContent = async (
       `;
   }
 
-  // 1. Try Gemini
+  // 1. Try Gemini with Model Fallback Strategy
   try {
-    const modelId = type === ContentType.IMG_TO_TEXT ? "gemini-1.5-flash" : "gemini-2.5-flash";
-    
     return await makeGeminiRequest(async (ai) => {
       let contents: any[] = [];
       
@@ -168,29 +171,54 @@ export const generateBanglaContent = async (
       
       contents.push({ text: prompt });
 
-      const response = await ai.models.generateContent({
-        model: modelId,
-        contents: contents,
-        config: {
-          systemInstruction: systemInstruction,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              options: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
+      // INTERNAL FUNCTION TO CALL API
+      const callApi = async (modelName: string) => {
+        return await ai.models.generateContent({
+          model: modelName,
+          contents: contents,
+          config: {
+            systemInstruction: systemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                options: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING }
+                }
               }
             }
           }
-        }
-      });
+        });
+      };
 
-      const jsonText = response.text;
-      if (!jsonText) return [];
+      // FALLBACK LOGIC: Try 2.5-flash, if 429/503/Fail, try 1.5-flash
+      try {
+         // Priority 1: 2.5 Flash (Smarter)
+         // Only use 2.5 if NOT OCR (OCR works better on 1.5 in some cases, but user wants 1.5 fallback for limits)
+         const primaryModel = type === ContentType.IMG_TO_TEXT ? "gemini-1.5-flash" : "gemini-2.5-flash";
+         const response = await callApi(primaryModel);
+         const jsonText = response.text;
+         if (!jsonText) throw new Error("Empty response");
+         const parsed = JSON.parse(jsonText);
+         return parsed.options || [];
 
-      const parsed = JSON.parse(jsonText);
-      return parsed.options || [];
+      } catch (err: any) {
+         // Check if error is related to quota or server overload
+         const isQuotaError = err.message && (err.message.includes('429') || err.message.includes('503') || err.message.includes('quota'));
+         
+         if (isQuotaError && type !== ContentType.IMG_TO_TEXT) {
+            console.warn("Gemini 2.5 Flash hit quota/error. Falling back to Gemini 1.5 Flash.");
+            // Priority 2: 1.5 Flash (More stable/higher limits)
+            const response = await callApi("gemini-1.5-flash");
+            const jsonText = response.text;
+            if (!jsonText) return [];
+            const parsed = JSON.parse(jsonText);
+            return parsed.options || [];
+         } else {
+            throw err; // Re-throw if it's not a quota error or if we are already on the fallback model
+         }
+      }
     });
 
   } catch (geminiError) {
@@ -325,7 +353,6 @@ export const generateImage = async (
 
       if (response.candidates && response.candidates[0]) {
         // If finishReason is SAFETY, we still check content, but we try to avoid throwing immediately if blocked
-        // However, usually blocked means no content.
         if (response.candidates[0].finishReason === 'SAFETY') {
              // We configured BLOCK_NONE, so this should happen less.
              // But if it does, we throw a specific error.
