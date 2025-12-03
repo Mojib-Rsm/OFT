@@ -167,9 +167,9 @@ export const generateBanglaContent = async (
     const isOCR = type === ContentType.IMG_TO_TEXT;
     
     try {
-       // Priority 1: gemini-2.5-flash (Requested)
-       // For OCR, try gemini-2.0-flash which has good vision
-       const primaryModel = isOCR ? "gemini-2.0-flash" : "gemini-2.5-flash";
+       // Priority 1: gemini-2.5-flash (User requested)
+       // For OCR, use gemini-2.0-flash-exp for better vision
+       const primaryModel = isOCR ? "gemini-2.0-flash-exp" : "gemini-2.5-flash";
        console.log(`Trying Primary Model: ${primaryModel}`);
        
        const response = await callApi(primaryModel);
@@ -183,7 +183,7 @@ export const generateBanglaContent = async (
        await delay(1000);
 
        try {
-          // Priority 2: gemini-2.0-flash (Stable, multimodal)
+          // Priority 2: gemini-2.0-flash (Stable)
           const secondaryModel = "gemini-2.0-flash";
           console.log(`Trying Secondary Model: ${secondaryModel}`);
 
@@ -198,8 +198,8 @@ export const generateBanglaContent = async (
            await delay(2000);
 
            try {
-               // Priority 3: gemini-1.5-flash (The most stable fallback)
-               const tertiaryModel = "gemini-1.5-flash";
+               // Priority 3: gemini-2.0-flash-exp (Experimental fallback)
+               const tertiaryModel = "gemini-2.0-flash-exp";
                console.log(`Trying Tertiary Model: ${tertiaryModel}`);
 
                const response = await callApi(tertiaryModel);
@@ -321,19 +321,19 @@ export const generateImage = async (
          };
 
          try {
-             // Priority 1: gemini-2.0-flash (Stable multimodal)
-             return await tryModel('gemini-2.0-flash');
+             // Priority 1: gemini-2.0-flash-exp (Experimental, good for multimodal)
+             return await tryModel('gemini-2.0-flash-exp');
          } catch (e) {
              console.warn("Editing model 1 failed, trying fallback...");
              await delay(1000);
              try {
-                 // Priority 2: gemini-1.5-pro (Best vision editor)
-                 return await tryModel('gemini-1.5-pro');
+                 // Priority 2: gemini-2.0-flash (Stable)
+                 return await tryModel('gemini-2.0-flash');
              } catch (e2) {
                  await delay(1000);
                  try {
-                     // Final attempt: gemini-1.5-flash
-                     return await tryModel('gemini-1.5-flash');
+                     // Final attempt: gemini-2.5-flash
+                     return await tryModel('gemini-2.5-flash');
                  } catch (e3) {
                      throw new Error(`Editing Failed. Details: ${errorLog.join(' | ')}`);
                  }
@@ -351,7 +351,7 @@ export const generateImage = async (
          const errorLog: string[] = [];
 
          try {
-             // Priority 1: imagen-4.0-fast-generate (Requested)
+             // Priority 1: imagen-4.0-fast-generate (User Requested)
              console.log("Trying Imagen: imagen-4.0-fast-generate");
              const response = await ai.models.generateImages({
                  model: 'imagen-4.0-fast-generate', 
@@ -366,15 +366,14 @@ export const generateImage = async (
 
          } catch (err1: any) {
              errorLog.push(`Imagen Fast: ${err1.message}`);
-             console.warn("Imagen Fast failed, trying Stable 3.0...", err1.message);
+             console.warn("Imagen Fast failed, trying Standard...", err1.message);
              await delay(1000);
              
              try {
-                 // Priority 2: imagen-3.0-generate-001 (Stable Fallback)
-                 // This fixes the 404 issue with 4.0 models
-                 console.log("Trying Imagen: imagen-3.0-generate-001");
+                 // Priority 2: imagen-4.0-generate (User Requested)
+                 console.log("Trying Imagen: imagen-4.0-generate");
                  const response = await ai.models.generateImages({
-                     model: 'imagen-3.0-generate-001', 
+                     model: 'imagen-4.0-generate', 
                      prompt: prompt,
                      config: { numberOfImages: 1, aspectRatio: finalAspectRatio as any }
                  });
@@ -384,16 +383,17 @@ export const generateImage = async (
                  }
                  throw new Error("Imagen Standard returned no images.");
              } catch (err2: any) {
-                  errorLog.push(`Imagen 3.0: ${err2.message}`);
+                  errorLog.push(`Imagen Std: ${err2.message}`);
                   console.warn("Imagen Standard failed, trying Gemini Generator...", err2.message);
                   await delay(1000);
 
-                  // Priority 3: gemini-2.0-flash (Last resort)
+                  // Priority 3: gemini-2.0-flash-exp (Fallback for images)
+                  // Using 'generateContent' with experimental models often yields inline images for some keys/regions
                   try {
                       const parts = [{ text: prompt }];
-                      console.log("Trying Fallback: gemini-2.0-flash");
+                      console.log("Trying Fallback: gemini-2.0-flash-exp");
                       const response = await ai.models.generateContent({
-                          model: 'gemini-2.0-flash', 
+                          model: 'gemini-2.0-flash-exp', 
                           contents: { parts: parts },
                           config: { safetySettings: SAFETY_SETTINGS as any },
                       });
