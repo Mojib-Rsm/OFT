@@ -164,34 +164,50 @@ export const generateBanglaContent = async (
       });
     };
 
-    // --- ROBUST FALLBACK SYSTEM ---
+    // --- ROBUST FALLBACK SYSTEM (UPDATED MODELS) ---
+    // Text Generation & OCR Strategy
+    const isOCR = type === ContentType.IMG_TO_TEXT;
+    
     try {
-       // Primary: 2.0 Flash (Fast & Capable)
-       const response = await callApi("gemini-2.0-flash");
+       // Primary: gemini-2.5-flash (Standard New Flash)
+       // For OCR, try gemini-3-pro first for best vision
+       const primaryModel = isOCR ? "gemini-3-pro" : "gemini-2.5-flash";
+       console.log(`Trying Primary Model: ${primaryModel}`);
+       
+       const response = await callApi(primaryModel);
        const jsonText = response.text;
-       if (!jsonText) throw new Error("Empty response from 2.0 Flash");
+       if (!jsonText) throw new Error(`Empty response from ${primaryModel}`);
        const parsed = JSON.parse(jsonText);
        return parsed.options || [];
+
     } catch (err: any) {
-       console.warn(`Primary model (2.0 Flash) failed: ${err.message}. Waiting 1s before retry...`);
+       console.warn(`Primary model failed: ${err.message}. Waiting 1s before retry...`);
        await delay(1000);
 
        try {
-          // Secondary: 1.5 Flash (Most Stable)
-          const response = await callApi("gemini-1.5-flash");
+          // Secondary: gemini-2.0-flash (Previous Flash)
+          // For OCR fallback: gemini-2.5-flash
+          const secondaryModel = isOCR ? "gemini-2.5-flash" : "gemini-2.0-flash";
+          console.log(`Trying Secondary Model: ${secondaryModel}`);
+
+          const response = await callApi(secondaryModel);
           const jsonText = response.text;
-          if (!jsonText) throw new Error("Empty response from 1.5 Flash");
+          if (!jsonText) throw new Error(`Empty response from ${secondaryModel}`);
           const parsed = JSON.parse(jsonText);
           return parsed.options || [];
+
        } catch (err2: any) {
-           console.warn(`Secondary model (1.5 Flash) failed: ${err2.message}. Waiting 2s before retry with Pro...`);
+           console.warn(`Secondary model failed: ${err2.message}. Waiting 2s before retry with Tertiary...`);
            await delay(2000);
 
            try {
-               // Tertiary: 1.5 Pro (Powerful, Separate Quota)
-               const response = await callApi("gemini-1.5-pro");
+               // Tertiary: gemini-3-pro (Flagship / Final Fallback)
+               const tertiaryModel = "gemini-3-pro";
+               console.log(`Trying Tertiary Model: ${tertiaryModel}`);
+
+               const response = await callApi(tertiaryModel);
                const jsonText = response.text;
-               if (!jsonText) throw new Error("Empty response from 1.5 Pro");
+               if (!jsonText) throw new Error(`Empty response from ${tertiaryModel}`);
                const parsed = JSON.parse(jsonText);
                return parsed.options || [];
            } catch (err3: any) {
@@ -236,7 +252,7 @@ export const generateImage = async (
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
   const isEditing = inputImages && inputImages.length > 0;
 
-  // SCENARIO 1: EDITING (Passport, Bg Remove) -> Use 2.0 Flash or 1.5 Pro
+  // SCENARIO 1: EDITING (Passport, Bg Remove)
   if (isEditing) {
       let fullPrompt = "";
       const parts: any[] = [];
@@ -281,6 +297,7 @@ export const generateImage = async (
       return await makeGeminiRequest(async (ai) => {
          // Fallback loop for Editing
          const tryModel = async (model: string) => {
+             console.log(`Trying Editing Model: ${model}`);
              const response = await ai.models.generateContent({
                 model: model, 
                 contents: { parts: parts },
@@ -301,23 +318,28 @@ export const generateImage = async (
          };
 
          try {
-             return await tryModel('gemini-2.0-flash');
+             // Primary: gemini-2.5-flash-preview-image (Specific for editing)
+             return await tryModel('gemini-2.5-flash-preview-image');
          } catch (e) {
+             console.warn("Primary editing model failed, trying fallback...", e);
              await delay(1000);
-             return await tryModel('gemini-1.5-pro'); // 1.5 Pro is best backup for editing
+             // Secondary: gemini-3-pro-image
+             return await tryModel('gemini-3-pro-image');
          }
       });
   }
 
-  // SCENARIO 2: CREATION (Text to Image) -> Imagen -> Fallback 2.0 Flash
+  // SCENARIO 2: CREATION (Text to Image)
   else {
       let prompt = `Generate a high quality ${category} image. Subject: ${promptText}.`;
       if (overlayText) prompt += " Do NOT write text on the image.";
 
       return await makeGeminiRequest(async (ai) => {
          try {
+             // Primary: imagen-4.0-fast-generate
+             console.log("Trying Imagen Model: imagen-4.0-fast-generate");
              const response = await ai.models.generateImages({
-                 model: 'imagen-3.0-generate-001', 
+                 model: 'imagen-4.0-fast-generate', 
                  prompt: prompt,
                  config: { numberOfImages: 1, aspectRatio: finalAspectRatio as any }
              });
@@ -328,24 +350,44 @@ export const generateImage = async (
              throw new Error("Imagen returned no images.");
 
          } catch (imagenError: any) {
-             console.warn("Imagen failed, trying Gemini 2.0 Flash.", imagenError.message);
+             console.warn("Imagen Fast failed, trying Imagen Standard.", imagenError.message);
              await delay(1000);
              
-             const parts = [{ text: prompt }];
-             const response = await ai.models.generateContent({
-                 model: 'gemini-2.0-flash', 
-                 contents: { parts: parts },
-                 config: { safetySettings: SAFETY_SETTINGS as any },
-             });
+             try {
+                 // Secondary: imagen-4.0-generate
+                 console.log("Trying Imagen Model: imagen-4.0-generate");
+                 const response = await ai.models.generateImages({
+                     model: 'imagen-4.0-generate', 
+                     prompt: prompt,
+                     config: { numberOfImages: 1, aspectRatio: finalAspectRatio as any }
+                 });
+                 
+                 if (response.generatedImages?.length > 0) {
+                     return [`data:image/png;base64,${response.generatedImages[0].image.imageBytes}`];
+                 }
+                 throw new Error("Imagen Standard returned no images.");
+             } catch (imagen2Error: any) {
+                  console.warn("Imagen Standard failed, trying Gemini Content Generation.", imagen2Error.message);
+                  await delay(1000);
 
-             const generatedImages: string[] = [];
-             if (response.candidates?.[0]?.content?.parts) {
-                for (const part of response.candidates[0].content.parts) {
-                   if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-                }
+                  // Tertiary: gemini-2.5-flash-preview-image (Via generateContent)
+                  const parts = [{ text: prompt }];
+                  console.log("Trying Fallback Model: gemini-2.5-flash-preview-image");
+                  const response = await ai.models.generateContent({
+                      model: 'gemini-2.5-flash-preview-image', 
+                      contents: { parts: parts },
+                      config: { safetySettings: SAFETY_SETTINGS as any },
+                  });
+
+                  const generatedImages: string[] = [];
+                  if (response.candidates?.[0]?.content?.parts) {
+                      for (const part of response.candidates[0].content.parts) {
+                        if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+                      }
+                  }
+                  if (generatedImages.length > 0) return generatedImages;
+                  throw new Error("Failed to generate image with all models.");
              }
-             if (generatedImages.length > 0) return generatedImages;
-             throw new Error("Failed to generate image with both models.");
          }
       });
   }
