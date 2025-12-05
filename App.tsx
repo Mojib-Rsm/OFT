@@ -108,11 +108,22 @@ const App: React.FC = () => {
       console.error(err);
       // Detailed error message extraction
       let errorMessage = "দুঃখিত, কন্টেন্ট তৈরি করা যায়নি। দয়া করে আবার চেষ্টা করুন।";
-      if (err.message) {
-         if (err.message.includes('429')) errorMessage = "সার্ভার ব্যস্ত আছে বা লিমিট শেষ হয়ে গেছে। একটু পরে আবার চেষ্টা করুন।";
-         else if (err.message.includes('SAFETY')) errorMessage = "আপনার রিকোয়েস্টটি এআই পলিসির কারণে ব্লক করা হয়েছে। দয়া করে অন্যভাবে চেষ্টা করুন।";
-         else errorMessage = err.message;
+      const msg = (err.message || "").toLowerCase();
+
+      // Standard Error Handling (Paid Tier friendly)
+      if (msg.includes('429') || msg.includes('quota') || msg.includes('resource_exhausted')) {
+         errorMessage = "সার্ভার বর্তমানে ব্যস্ত আছে (Quota Limit Reached)। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।";
+      } 
+      else if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('leaked')) {
+         errorMessage = "আপনার API Key টি সমস্যা করছে (Leaked/Invalid)। দয়া করে নতুন একটি API Key সেট করুন।";
       }
+      else if (msg.includes('safety') || msg.includes('harm_category')) {
+         errorMessage = "আপনার রিকোয়েস্টটি এআই পলিসির কারণে ব্লক করা হয়েছে। দয়া করে শব্দ বা ছবি পরিবর্তন করে চেষ্টা করুন।";
+      } 
+      else if (msg.includes('503') || msg.includes('overloaded')) {
+         errorMessage = "গুগল সার্ভার ওভারলোডেড। দয়া করে কিছুক্ষণ পর চেষ্টা করুন।";
+      }
+
       setError(errorMessage);
     } finally {
       setIsLoading(false);

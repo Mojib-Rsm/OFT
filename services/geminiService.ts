@@ -16,10 +16,11 @@ const getEnvVar = (key: string): string => {
 const envGeminiKeys = getEnvVar("VITE_GEMINI_API_KEYS") || getEnvVar("GEMINI_API_KEYS") || "";
 const singleGeminiKey = getEnvVar("VITE_API_KEY") || getEnvVar("API_KEY");
 
+// Clean and filter keys
 const API_KEYS = [
   ...envGeminiKeys.split(',').map(k => k.trim()),
-  singleGeminiKey
-].filter((key, index, self) => !!key && key.length > 0 && self.indexOf(key) === index);
+  singleGeminiKey ? singleGeminiKey.trim() : ""
+].filter((key, index, self) => !!key && key.length > 10 && self.indexOf(key) === index);
 
 console.log(`Loaded ${API_KEYS.length} API Keys for rotation.`);
 
@@ -35,6 +36,23 @@ const SAFETY_SETTINGS = [
 // Delay helper
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Helper to extract wait time from error message
+const parseRetryAfter = (errorMessage: string): number => {
+  // Pattern 1: "retry in 30.900s" or "retry in 2.3s"
+  const matchIn = errorMessage.match(/retry in (\d+(\.\d+)?)s/i);
+  if (matchIn && matchIn[1]) {
+    return Math.ceil(parseFloat(matchIn[1]) * 1000);
+  }
+
+  // Pattern 2: "retryDelay": "30s" (sometimes in JSON details)
+  const matchJson = errorMessage.match(/"retryDelay"\s*:\s*"(\d+(\.\d+)?)s"/);
+  if (matchJson && matchJson[1]) {
+    return Math.ceil(parseFloat(matchJson[1]) * 1000);
+  }
+
+  return 0;
+};
+
 // Helper function to execute API calls with rotation/failover logic for Gemini
 const makeGeminiRequest = async <T>(
   operation: (ai: GoogleGenAI) => Promise<T>
@@ -45,20 +63,86 @@ const makeGeminiRequest = async <T>(
 
   let lastError: any = null;
 
-  for (const apiKey of API_KEYS) {
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-      return await operation(ai);
-    } catch (error: any) {
-      console.warn(`Key ...${apiKey.slice(-4)} failed: ${error.message}. Switching key...`);
-      lastError = error;
-      // If error is 429, wait a bit longer before trying next key
-      if (error.message?.includes('429')) await delay(1000);
-      continue;
+  for (let i = 0; i < API_KEYS.length; i++) {
+    const apiKey = API_KEYS[i];
+    const ai = new GoogleGenAI({ apiKey });
+    
+    // Retry logic per key
+    const maxRetries = 2; 
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation(ai);
+      } catch (error: any) {
+        lastError = error;
+        
+        const msg = (error.message || JSON.stringify(error)).toLowerCase();
+        
+        // --- CRITICAL ERROR CHECKS ---
+
+        // 1. Invalid/Leaked Key (403)
+        const isForbidden = msg.includes('403') || msg.includes('permission_denied') || msg.includes('leaked') || msg.includes('api key not valid');
+        if (isForbidden) {
+            console.error(`Key ...${apiKey.slice(-4)} is INVALID/LEAKED. Skipping immediately.`);
+            break; 
+        }
+
+        // 2. Rate Limits (429) / Quota
+        const isQuota = msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('quota');
+        const isCompositeQuota = msg.includes('editing failed') && isQuota;
+        
+        // 3. Daily Limit Hard Stop
+        const isDailyLimit = msg.includes('generaterequestsperday');
+        if (isDailyLimit) {
+            console.warn(`Key ...${apiKey.slice(-4)} hit DAILY limit. Switching key.`);
+            break; 
+        }
+
+        // --- ROTATION STRATEGY ---
+
+        // If we have multiple keys and hit a rate limit, switch IMMEDIATELY.
+        if ((isQuota || isCompositeQuota) && API_KEYS.length > 1) {
+             console.warn(`Key ...${apiKey.slice(-4)} hit rate limit. Switching to next key immediately.`);
+             break; 
+        }
+
+        // Server errors
+        const isServer = msg.includes('503') || msg.includes('500') || msg.includes('overloaded');
+        
+        // If it's not a retryable error type, give up on this key
+        if (!isQuota && !isServer && !isCompositeQuota) {
+          break;
+        }
+
+        if (attempt === maxRetries) {
+          console.warn(`Key ...${apiKey.slice(-4)} max retries exhausted.`);
+          break;
+        }
+
+        // --- DYNAMIC WAIT TIME ---
+        let waitTime = 2000; 
+        const requiredWait = parseRetryAfter(msg);
+
+        if (requiredWait > 0) {
+            // Add buffer
+            waitTime = requiredWait + 2000;
+            // Cap max wait at 20s for better UX on Paid plans
+            if (waitTime > 20000) waitTime = 20000;
+        } else if (isQuota || isCompositeQuota) {
+            waitTime = 3000 * (attempt + 1);
+        }
+        
+        console.warn(`Key ...${apiKey.slice(-4)} busy (Attempt ${attempt + 1}). Waiting ${Math.round(waitTime/1000)}s...`);
+        await delay(waitTime);
+      }
+    }
+
+    if (i < API_KEYS.length - 1) {
+        console.log(`Switching to next API Key...`);
     }
   }
 
-  throw lastError || new Error("All Gemini API keys failed.");
+  throw lastError || new Error("All Gemini API keys failed. Please try again later.");
 };
 
 // --- MAIN SERVICE FUNCTIONS ---
@@ -83,57 +167,31 @@ export const generateBanglaContent = async (
     
     Content Types & Styles:
     1. Posts/Captions: Engaging, varied length, use emojis.
-    2. Comments: Contextual, reply-oriented, natural slang. If an image/screenshot is provided, analyze it thoroughly.
-    3. Bios: Short, stylish, identity-focused.
-    4. Stories: Very short, punchy (under 15 words).
-    5. Notes: Extremely short thoughts (max 60 characters).
-    6. Scripts: Structured video scripts (Title, Hook, Body, Call to Action).
-    7. Emails: Professional or formal format.
-    8. Ad Copies: Catchy headline, benefit-driven body, strong Call to Action.
-    9. Poems: Rhythmic, artistic, stanza-based structure.
-    10. PDF Maker: Structured professional documents (Report, Assignment). USE MARKDOWN (bold, newlines).
-    11. Image To Text (OCR): Extract text verbatim.
+    2. Comments: Contextual, reply-oriented, natural slang.
+    3. Bios/Status: Short, stylish.
+    4. Legal/Formal: Use proper formal terminology (Sadhu/Cholito mix where appropriate).
+    5. OCR/Text Extraction: Extract text exactly as is.
     
-    // NEW COMPUTER SHOP TOOLS
-    12. Legal Agreement (Stamps): Generate formal legal text suitable for Non-Judicial Stamps. Use standard legal Bengali terminology (হলফনামা, চুক্তিপত্র, অঙ্গীকারনামা). Format clearly with "Member 1", "Member 2", "Terms & Conditions", "Witnesses".
-    13. Official Application: Formal application letters to Govt/Bank/Union Parishad. Use proper "To/Subject/Body/Sincerely" format.
-    14. CV/Bio-data: 
-        - If "Corporate": Professional English Resume structure (Summary, Skills, Exp, Edu).
-        - If "Marriage": Traditional Bengali Marriage Bio-data structure (Name, Father/Mother, Address, Edu, Physical, Family Details).
-
     Guidelines:
-    - If Language is Bengali, use authentic informal Bengali for social, but FORMAL SADHU/CHOLITO mix for Legal/Applications as appropriate.
-    - For Political Comments: Be persuasive, logical, or critical.
+    - If Language is Bengali, use authentic informal Bengali for social, but FORMAL for Legal/Applications.
     - STRICTLY output JSON with a property "options" containing an array of strings.
   `;
 
   let prompt = `
-    Generate 5 distinct options for a ${type} in ${targetLanguage} based on the following details:
-    - Category: ${category}
-    - Context/Data: ${context || 'General/Random'}
-    ${party ? `- Target Political Party/Group: ${party}` : ''}
-    ${tone ? `- Tone/Mood: ${tone}` : ''}
-    ${length ? `- Desired Length: ${length}` : ''}
-    ${userInstruction ? `- Specific User Instruction/Point to include: ${userInstruction}` : ''}
-    ${inputImages && inputImages.length > 0 ? `- Attached Image(s): Analyze the visual context.` : ''}
-    
-    Specific Instructions:
-    - If the "Context/Data" contains formatted keys (Name, To, Subject, etc.), extract and use that data accurately to fill the document.
-    - If Legal: Create a draft suitable for a 300/1000 TK Stamp.
-    - If CV_BIO: Create a complete structured format. Use Markdown for bold headings.
-    - If Application: Standard formal letter format.
-    - If PDF Maker: Create a structured document. Use **Bold** for titles.
-    - **CRITICAL:** If "Specific User Instruction" is provided, ensure the generated content specifically mentions that point.
+    Generate 3 distinct options for a ${type} in ${targetLanguage}.
+    Category: ${category}
+    Context: ${context || 'General'}
+    ${party ? `Party: ${party}` : ''}
+    ${tone ? `Tone: ${tone}` : ''}
+    ${userInstruction ? `Instruction: ${userInstruction}` : ''}
     
     Return a JSON object with a single property 'options' which is an array of strings.
   `;
 
   if (type === ContentType.IMG_TO_TEXT) {
       prompt = `
-      Act as a highly accurate OCR (Optical Character Recognition) tool.
+      Act as a highly accurate OCR tool.
       Task: Analyze the attached image(s) and extract ALL visible text.
-      Fix potential spelling errors caused by image noise.
-      Maintain original formatting.
       Return a JSON object with property "options" containing an array with ONE string: the full extracted text.
       `;
   }
@@ -172,8 +230,8 @@ export const generateBanglaContent = async (
     const isOCR = type === ContentType.IMG_TO_TEXT;
     
     try {
-       // Priority 1: gemini-2.5-flash (User List) OR gemini-3-pro for OCR
-       const primaryModel = isOCR ? "gemini-3-pro" : "gemini-2.5-flash";
+       // Priority 1
+       const primaryModel = isOCR ? "gemini-3-pro-preview" : "gemini-2.5-flash";
        console.log(`Trying Primary Model: ${primaryModel}`);
        
        const response = await callApi(primaryModel);
@@ -183,38 +241,21 @@ export const generateBanglaContent = async (
        return parsed.options || [];
 
     } catch (err: any) {
-       console.warn(`Primary model failed: ${err.message}. Waiting 1s...`);
-       await delay(1000);
-
+       console.warn(`Primary model failed: ${err.message}.`);
+       const msg = (err.message || "").toLowerCase();
+       
+       if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('leaked')) throw err; 
+       
+       // Allow fallback for ANY Quota (429) or Server Error (500)
        try {
-          // Priority 2: gemini-2.0-flash (User List)
-          const secondaryModel = "gemini-2.0-flash";
+          // Priority 2
+          const secondaryModel = "gemini-flash-lite-latest";
           console.log(`Trying Secondary Model: ${secondaryModel}`);
-
           const response = await callApi(secondaryModel);
-          const jsonText = response.text;
-          if (!jsonText) throw new Error(`Empty response from ${secondaryModel}`);
-          const parsed = JSON.parse(jsonText);
+          const parsed = JSON.parse(response.text || "{}");
           return parsed.options || [];
-
        } catch (err2: any) {
-           console.warn(`Secondary model failed: ${err2.message}. Waiting 2s...`);
-           await delay(2000);
-
-           try {
-               // Priority 3: gemini-2.5-pro (User List - Strongest fallback for text)
-               const tertiaryModel = "gemini-2.5-pro";
-               console.log(`Trying Tertiary Model: ${tertiaryModel}`);
-
-               const response = await callApi(tertiaryModel);
-               const jsonText = response.text;
-               if (!jsonText) throw new Error(`Empty response from ${tertiaryModel}`);
-               const parsed = JSON.parse(jsonText);
-               return parsed.options || [];
-           } catch (err3: any) {
-               console.error("All text models failed.");
-               throw err3;
-           }
+           throw err2;
        }
     }
   });
@@ -223,21 +264,16 @@ export const generateBanglaContent = async (
 const getDressDescription = (dressType: string, coupleDress?: string): string => {
   if (dressType.includes('কাপল') || dressType.includes('Couple')) {
      if (coupleDress) {
-        if (coupleDress.includes('Original') || coupleDress.includes('আসল')) return "their original clothing, ensuring it looks neat, clean and professional";
-        if (coupleDress.includes('FORMAL')) return "matching formal professional attire for both persons (dark navy business suit for man, formal black blazer or professional saree for woman)";
-        if (coupleDress.includes('TRADITIONAL')) return "matching traditional attire for both persons (punjabi/kurta for man, saree/salwar kameez for woman)";
-        if (coupleDress.includes('MATCHING_WHITE')) return "matching white shirts or white outfits for both persons";
-        if (coupleDress.includes('CASUAL')) return "smart casual outfits for both persons";
+        if (coupleDress.includes('Original')) return "their original clothing, ensuring it looks neat";
+        if (coupleDress.includes('FORMAL')) return "matching formal professional attire";
+        if (coupleDress.includes('TRADITIONAL')) return "matching traditional attire";
+        if (coupleDress.includes('MATCHING_WHITE')) return "matching white outfits";
      }
-     return "matching formal professional attire for both persons";
+     return "matching formal professional attire";
   }
-
-  if (dressType.includes('সুট')) return "a professional dark navy blue business suit with a white shirt and a silk tie";
+  if (dressType.includes('সুট')) return "a professional dark navy blue business suit with a white shirt";
   if (dressType.includes('সাদা শার্ট')) return "a crisp, clean white formal button-down shirt";
-  if (dressType.includes('ব্লেজার')) return "a formal black blazer worn over a professional blouse";
-  if (dressType.includes('মার্জিত')) return "modest, formal traditional or professional attire suitable for official documents";
-  if (dressType.includes('ইউনিফর্ম') || dressType.includes('Student')) return "a standard white formal school uniform shirt with a collar";
-  
+  if (dressType.includes('ব্লেজার')) return "a formal black blazer";
   return "formal official attire suitable for passport photos";
 };
 
@@ -253,11 +289,10 @@ export const generateImage = async (
 ): Promise<string[]> => {
   
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
-  // Improved detection logic using ContentType
   const isDocEnhancer = type === ContentType.DOC_ENHANCER;
   const isEditing = (inputImages && inputImages.length > 0) || isDocEnhancer;
 
-  // SCENARIO 1: EDITING (Passport, Bg Remove, Doc Enhancer, or any tool with uploaded image)
+  // SCENARIO 1: EDITING (Image-to-Image)
   if (isEditing && inputImages && inputImages.length > 0) {
       let fullPrompt = "";
       const parts: any[] = [];
@@ -273,37 +308,19 @@ export const generateImage = async (
          const dressInstruction = passportConfig.dress.includes('আসল') 
            ? 'Ensure clothing looks neat.' 
            : `Change outfit to ${getDressDescription(passportConfig.dress, passportConfig.coupleDress)}.`;
-
          const bgInstruction = passportConfig.bg.includes('অফিস') 
            ? 'Change background to a blurred professional office.' 
            : `Change background to solid ${passportConfig.bg.split(' ')[0]} color.`;
 
-         const isCouple = passportConfig.dress.includes('Couple') || passportConfig.dress.includes('কাপল');
-         let identityInstruction = isCouple ? 'faces of the people' : 'face';
-         if (isCouple && inputImages.length > 1) {
-            identityInstruction = "faces of the people from the provided source images (Combine them if needed)";
-         }
-
          fullPrompt = `GENERATE a professional passport photo.
          INSTRUCTIONS:
-         1. IDENTITY: Keep ${identityInstruction} EXACTLY the same.
+         1. IDENTITY: Keep faces EXACTLY the same.
          2. CLOTHING: ${dressInstruction}
          3. BACKGROUND: ${bgInstruction}
-         4. ALIGNMENT: Center ${isCouple ? 'heads' : 'head'}.
-         ${passportConfig.country.includes('BD') ? 'Format: Bangladesh Passport standard.' : ''}
-         ${inputImages.length > 1 ? 'MERGE the subjects into a single frame.' : ''}
+         4. ALIGNMENT: Center subject.
          Return ONLY the image.`;
       } else if (isDocEnhancer) {
-         fullPrompt = `
-           Act as a professional Document Scanner and Restoration AI.
-           Task: Enhance this document image for printing.
-           1. BACKGROUND: Remove shadows, wrinkles, and dark spots. Make background pure clean WHITE.
-           2. TEXT: Sharpen the text. If it is black and white, make text high-contrast BLACK. If colored, keep colors vivid.
-           3. ALIGNMENT: Straighten the document if it is skewed (Perspective Correction).
-           4. OUTPUT: A high-quality, printable scanned version of the input.
-           ${promptText ? `Additional Instruction: ${promptText}` : ''}
-           Return ONLY the enhanced image.
-         `;
+         fullPrompt = `Act as a Document Scanner. Enhance this document: Remove shadows, make background white, sharpen text. Return ONLY the image.`;
       } else {
          fullPrompt = `Edit this image. ${promptText}. Style: ${category}. Return ONLY the image.`;
       }
@@ -311,131 +328,97 @@ export const generateImage = async (
       parts.push({ text: fullPrompt });
 
       return await makeGeminiRequest(async (ai) => {
-         const errorLog: string[] = [];
-         
          const tryModel = async (model: string) => {
              console.log(`Trying Editing Model: ${model}`);
-             try {
-                const response = await ai.models.generateContent({
-                    model: model, 
-                    contents: { parts: parts },
-                    config: { safetySettings: SAFETY_SETTINGS as any },
-                });
-                
-                const generatedImages: string[] = [];
-                let textOutput = "";
-
-                if (response.candidates?.[0]?.content?.parts) {
-                    for (const part of response.candidates[0].content.parts) {
-                    if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-                    else if (part.text) textOutput += part.text;
-                    }
-                }
-                if (generatedImages.length > 0) return generatedImages;
-                throw new Error(textOutput || "No image output.");
-             } catch (e: any) {
-                errorLog.push(`${model}: ${e.message}`);
-                throw e;
+             const config: any = { safetySettings: SAFETY_SETTINGS };
+             if (model.includes('image')) {
+                config.imageConfig = { aspectRatio: finalAspectRatio };
              }
+             
+             const response = await ai.models.generateContent({
+                 model: model, 
+                 contents: { parts: parts },
+                 config: config,
+             });
+             
+             const generatedImages: string[] = [];
+             if (response.candidates?.[0]?.content?.parts) {
+                 for (const part of response.candidates[0].content.parts) {
+                   if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+                 }
+             }
+             if (generatedImages.length > 0) return generatedImages;
+             throw new Error("No image output.");
          };
 
+         // Attempt models in sequence. 
          try {
-             // Priority 1: gemini-2.0-flash (User requested for Editing)
-             return await tryModel('gemini-2.0-flash');
-         } catch (e) {
-             console.warn("Editing model 1 failed, trying fallback...");
-             await delay(1000);
+             return await tryModel('gemini-2.5-flash-image');
+         } catch (e: any) {
+             const msg = (e.message || "").toLowerCase();
+             
+             if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('leaked')) throw e; 
+             
+             console.warn("gemini-2.5-flash-image failed, trying fallback to Pro...");
+             
              try {
-                 // Priority 2: gemini-2.5-flash-preview-image (Replaced invalid names in previous steps, but keeping strictly to user list)
-                 // Since 2.5-flash-preview-image might be unavailable, we try 2.5-flash standard as fallback for capabilities
-                 return await tryModel('gemini-2.5-flash');
-             } catch (e2) {
-                 await delay(1000);
-                 try {
-                     // Final attempt: gemini-3-pro-image (Strongest vision)
-                     return await tryModel('gemini-3-pro-image');
-                 } catch (e3) {
-                     throw new Error(`Editing Failed. Details: ${errorLog.join(' | ')}`);
-                 }
+                 return await tryModel('gemini-3-pro-image-preview');
+             } catch (e2: any) {
+                 // Propagate composite error 
+                 throw new Error(`Editing Failed. Details: ${e.message} | ${e2.message}`);
              }
          }
       });
   }
 
-  // SCENARIO 2: CREATION (Text to Image) - Banner, Visiting Card, etc.
+  // SCENARIO 2: CREATION (Text-to-Image)
   else {
       let prompt = `Generate a high quality ${category} image. Subject: ${promptText}.`;
-      if (type === ContentType.VISITING_CARD) prompt = `Design a professional Visiting Card. Style: ${category}. Details: ${promptText}`;
-      if (type === ContentType.BANNER) prompt = `Design a large format Banner/Flex. Style: ${category}. Details: ${promptText}`;
-      if (type === ContentType.INVITATION) prompt = `Design a beautiful Invitation Card. Style: ${category}. Details: ${promptText}`;
-      
       if (overlayText) prompt += " Do NOT write text on the image.";
       
-      // Force prompt to request an image output if falling back to Gemini
-      const geminiFallbackPrompt = `${prompt} \n\nCRITICAL: Return ONLY the generated image. Do not provide any text description.`;
+      const geminiFallbackPrompt = `${prompt} \n\nCRITICAL: Return ONLY the generated image.`;
 
       return await makeGeminiRequest(async (ai) => {
-         const errorLog: string[] = [];
-
+         // Try Imagen first
          try {
-             // Priority 1: imagen-4.0-fast-generate (User Requested)
              console.log("Trying Imagen: imagen-4.0-fast-generate");
              const response = await ai.models.generateImages({
                  model: 'imagen-4.0-fast-generate', 
                  prompt: prompt,
                  config: { numberOfImages: 1, aspectRatio: finalAspectRatio as any }
              });
-             
              if (response.generatedImages?.length > 0) {
                  return [`data:image/png;base64,${response.generatedImages[0].image.imageBytes}`];
              }
-             throw new Error("Imagen returned no images.");
-
-         } catch (err1: any) {
-             errorLog.push(`Imagen Fast: ${err1.message}`);
-             console.warn("Imagen Fast failed, trying Standard...", err1.message);
-             await delay(1000);
+             throw new Error("No images from Imagen.");
+         } catch (err: any) {
+             const msg = (err.message || "").toLowerCase();
+             if (msg.includes('403') || msg.includes('permission_denied')) throw err;
              
+             console.warn("Imagen failed, trying Gemini fallback...");
+             
+             // Fallback to Gemini 2.5 Flash Image
              try {
-                 // Priority 2: imagen-4.0-generate (User Requested)
-                 console.log("Trying Imagen: imagen-4.0-generate");
-                 const response = await ai.models.generateImages({
-                     model: 'imagen-4.0-generate', 
-                     prompt: prompt,
-                     config: { numberOfImages: 1, aspectRatio: finalAspectRatio as any }
-                 });
-                 
-                 if (response.generatedImages?.length > 0) {
-                     return [`data:image/png;base64,${response.generatedImages[0].image.imageBytes}`];
-                 }
-                 throw new Error("Imagen Standard returned no images.");
-             } catch (err2: any) {
-                  errorLog.push(`Imagen Std: ${err2.message}`);
-                  console.warn("Imagen Standard failed, trying Gemini Generator...", err2.message);
-                  await delay(1000);
-
-                  // Priority 3: gemini-2.0-flash (Fallback for images)
-                  try {
-                      const parts = [{ text: geminiFallbackPrompt }];
-                      console.log("Trying Fallback: gemini-2.0-flash");
-                      const response = await ai.models.generateContent({
-                          model: 'gemini-2.0-flash', 
-                          contents: { parts: parts },
-                          config: { safetySettings: SAFETY_SETTINGS as any },
-                      });
-
-                      const generatedImages: string[] = [];
-                      if (response.candidates?.[0]?.content?.parts) {
-                          for (const part of response.candidates[0].content.parts) {
-                            if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-                          }
+                  const parts = [{ text: geminiFallbackPrompt }];
+                  console.log("Trying Fallback: gemini-2.5-flash-image");
+                  const response = await ai.models.generateContent({
+                      model: 'gemini-2.5-flash-image', 
+                      contents: { parts: parts },
+                      config: { 
+                         safetySettings: SAFETY_SETTINGS as any,
+                         imageConfig: { aspectRatio: finalAspectRatio }
+                      },
+                  });
+                  const generatedImages: string[] = [];
+                  if (response.candidates?.[0]?.content?.parts) {
+                      for (const part of response.candidates[0].content.parts) {
+                        if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
                       }
-                      if (generatedImages.length > 0) return generatedImages;
-                      throw new Error("Gemini returned no images.");
-                  } catch (err3: any) {
-                      errorLog.push(`Gemini: ${err3.message}`);
-                      throw new Error(`Image Generation Failed. Details: ${errorLog.join(' | ')}`);
                   }
+                  if (generatedImages.length > 0) return generatedImages;
+                  throw new Error("No images from Gemini fallback.");
+             } catch (err2) {
+                 throw err2;
              }
          }
       });
