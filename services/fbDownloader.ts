@@ -13,41 +13,43 @@ export async function getFacebookVideo(url: string): Promise<FbVideoResponse> {
   // Helper to clean extracted URLs
   const cleanUrl = (link: string) => {
       if (!link) return undefined;
-      let cleaned = link;
-      cleaned = cleaned.replace(/\\u0026/g, "&")
-                       .replace(/\\u0025/g, "%")
-                       .replace(/\\/g, "");
       try {
+        // Multi-pass cleaning for various escape formats
+        let cleaned = link
+          .replace(/\\u0025/g, "%")
+          .replace(/\\u0026/g, "&")
+          .replace(/\\u003D/g, "=")
+          .replace(/\\/g, "")
+          .replace(/&amp;/g, "&")
+          .replace(/&quot;/g, '"');
+        
         return decodeURIComponent(cleaned);
       } catch (e) {
-        return cleaned;
+        return link;
       }
   };
 
-  // Proxies
-  // We use parallel fetching to speed up the process significantly
+  // Proxies to try - Added more robust CORS proxies
   const getProxifiedUrls = (targetUrl: string) => [
-      `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
       `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-      // Add a cache buster to prevent stale data
-      `https://thingproxy.freeboard.io/fetch/${targetUrl}` 
+      `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`
   ];
 
-  // Prepare URL variants
   let targetUrls: string[] = [];
   
-  if (url.match(/(facebook|fb)\.com/)) {
-      // 1. mbasic (Fastest & Easiest to parse)
-      const mbasic = url.replace(/(www|web|m)\.facebook\.com/, 'mbasic.facebook.com');
-      // 2. www (Contains JSON blobs for HD)
-      const www = url.replace(/(mbasic|m|web)\.facebook\.com/, 'www.facebook.com');
-      
-      targetUrls = [mbasic, www];
+  // FB URL Normalization
+  if (url.includes('facebook.com') || url.includes('fb.watch')) {
+      // 1. Try mbasic (easiest HTML structure)
+      targetUrls.push(url.replace(/(www|web|m)\.facebook\.com/, 'mbasic.facebook.com'));
+      // 2. Try mobile (sometimes has different meta tags)
+      targetUrls.push(url.replace(/(www|web|mbasic)\.facebook\.com/, 'm.facebook.com'));
+      // 3. Try desktop (contains high quality JSON blobs)
+      targetUrls.push(url.replace(/(mbasic|m|web)\.facebook\.com/, 'www.facebook.com'));
   } else {
       targetUrls = [url];
   }
 
-  // Flatten into a list of all Proxy + URL combinations
   const requestPromises: Promise<string>[] = [];
 
   targetUrls.forEach(tUrl => {
@@ -55,7 +57,7 @@ export async function getFacebookVideo(url: string): Promise<FbVideoResponse> {
           requestPromises.push(
               fetch(pUrl, { 
                   headers: { 
-                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' 
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
                   } 
               })
               .then(res => {
@@ -63,74 +65,106 @@ export async function getFacebookVideo(url: string): Promise<FbVideoResponse> {
                   return res.text();
               })
               .then(text => {
-                  if(text.length < 100) throw new Error('Empty response');
-                  return text;
+                   if(text.length < 500) throw new Error('Response too short');
+                   // If it's a login page, treat as failed request unless we find og tags
+                   if(text.includes('login_form') && !text.includes('og:video')) throw new Error('Login required');
+                   return text;
               })
           );
       });
   });
 
   try {
-      // RACE: Wait for the FIRST successful response (Speed Optimization)
-      // We use Promise.any to ignore failures and get the first success
+      // Race for the first successful HTML response
       const html = await (Promise as any).any(requestPromises);
 
-      // --- PARSING ---
       let sd = undefined;
       let hd = undefined;
       let thumbnail = undefined;
       let title = "Facebook Video";
 
-      // 1. Extract Thumbnail (og:image)
-      const thumbMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/);
-      if (thumbMatch && thumbMatch[1]) {
-          thumbnail = cleanUrl(thumbMatch[1]);
-      }
+      // Meta extraction
+      const thumbMatch = html.match(/property="og:image"\s+content="([^"]+)"/) || html.match(/"thumbnailUrl"\s*:\s*"([^"]+)"/);
+      if (thumbMatch) thumbnail = cleanUrl(thumbMatch[1]);
 
-      // 2. Extract Title (og:title)
-      const titleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/);
-      if (titleMatch && titleMatch[1]) {
-          title = cleanUrl(titleMatch[1]) || "Facebook Video";
-      }
+      const titleMatch = html.match(/property="og:title"\s+content="([^"]+)"/) || html.match(/<title>(.*?)<\/title>/);
+      if (titleMatch) title = cleanUrl(titleMatch[1]);
 
-      // 3. Extract Video Links (HD/SD)
+      // --- STRATEGY 1: Advanced Regex for JSON Keys ---
+      // Facebook hides URLs in JSON-like structures inside <script> tags
       
-      // Method A: JSON extraction (Common in www)
-      const hdMatch = html.match(/"hd_src"\s*:\s*"([^"]+)"/) || 
-                      html.match(/"browser_native_hd_url"\s*:\s*"([^"]+)"/) || 
-                      html.match(/playable_url_quality_hd"\s*:\s*"([^"]+)"/);
-                      
-      const sdMatch = html.match(/"sd_src"\s*:\s*"([^"]+)"/) || 
-                      html.match(/"browser_native_sd_url"\s*:\s*"([^"]+)"/) || 
-                      html.match(/playable_url"\s*:\s*"([^"]+)"/);
+      const patterns = {
+          hd: [
+              /"hd_src"\s*:\s*"([^"]+)"/,
+              /"playable_url_quality_hd"\s*:\s*"([^"]+)"/,
+              /"browser_native_hd_url"\s*:\s*"([^"]+)"/,
+              /hd_src_no_ratelimit:"([^"]+)"/
+          ],
+          sd: [
+              /"sd_src"\s*:\s*"([^"]+)"/,
+              /"playable_url"\s*:\s*"([^"]+)"/,
+              /"browser_native_sd_url"\s*:\s*"([^"]+)"/,
+              /sd_src_no_ratelimit:"([^"]+)"/
+          ]
+      };
 
-      if (hdMatch) hd = cleanUrl(hdMatch[1]);
-      if (sdMatch) sd = cleanUrl(sdMatch[1]);
+      for (const pattern of patterns.hd) {
+          const match = html.match(pattern);
+          if (match && match[1]) {
+              hd = cleanUrl(match[1]);
+              break;
+          }
+      }
 
-      // Method B: Redirect extraction (Common in mbasic)
+      for (const pattern of patterns.sd) {
+          const match = html.match(pattern);
+          if (match && match[1]) {
+              sd = cleanUrl(match[1]);
+              break;
+          }
+      }
+
+      // --- STRATEGY 2: Redirect Link (Mbasic) ---
       if (!sd && !hd) {
           const redirectMatch = html.match(/href\s*=\s*["']\/video_redirect\/\?src=([^"']+)["']/);
-          if (redirectMatch && redirectMatch[1]) {
-              sd = cleanUrl(redirectMatch[1]);
+          if (redirectMatch) sd = cleanUrl(redirectMatch[1]);
+      }
+
+      // --- STRATEGY 3: OpenGraph & Meta Tags ---
+      if (!sd && !hd) {
+          const ogVideo = html.match(/property="og:video"\s+content="([^"]+)"/);
+          if (ogVideo) sd = cleanUrl(ogVideo[1]);
+          
+          const ogVideoSecure = html.match(/property="og:video:secure_url"\s+content="([^"]+)"/);
+          if (ogVideoSecure && !sd) sd = cleanUrl(ogVideoSecure[1]);
+      }
+
+      // --- STRATEGY 4: Twitter Player (often unencrypted) ---
+      if (!sd && !hd) {
+          const twStream = html.match(/name="twitter:player:stream"\s+content="([^"]+)"/);
+          if (twStream) sd = cleanUrl(twStream[1]);
+      }
+
+      // --- STRATEGY 5: Brute Force Scan for MP4 ---
+      // Sometimes URLs are just sitting in the JS as literals
+      if (!sd && !hd) {
+          // Look for https://...mp4 patterns
+          const mp4Matches = html.match(/https?:\/\/[^"'\s]+\.mp4[^"'\s]*/g);
+          if (mp4Matches && mp4Matches.length > 0) {
+             // Filter for likely valid video CDN links
+             const validMp4 = mp4Matches.find((m: string) => 
+                 (m.includes('fbcdn') || m.includes('video')) && !m.includes('byte-range')
+             );
+             if (validMp4) sd = cleanUrl(validMp4);
           }
       }
 
-      // Method C: OpenGraph Video (Fallback)
-      if (!sd && !hd) {
-          const metaMatch = html.match(/<meta\s+property="og:video"\s+content="([^"]+)"/);
-          if (metaMatch && metaMatch[1]) {
-              sd = cleanUrl(metaMatch[1]);
-          }
-      }
-
-      if (!sd && !hd) {
-          throw new Error("No video links found");
-      }
+      if (!sd && !hd) throw new Error("No video links found");
 
       return { sd, hd, thumbnail, title };
 
   } catch (error) {
-      console.error("All proxies failed or no video found", error);
-      return { error: "ভিডিওটি প্রাইভেট অথবা লিংকটি কাজ করছে না। দয়া করে পাবলিক ভিডিও লিংক দিন।" };
+      console.error("FB Download Error:", error);
+      return { error: "ভিডিওটি লোড করা যায়নি। এটি প্রাইভেট হতে পারে অথবা লিংকটি ভুল।" };
   }
 }
