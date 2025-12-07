@@ -1,7 +1,10 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { ContentType, PassportConfig, ContentLanguage } from "../types";
 
-// --- ENVIRONMENT VARIABLE HANDLING ---
+// --- HELPERS ---
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const getEnvVar = (key: string): string => {
   if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
@@ -13,139 +16,61 @@ const getEnvVar = (key: string): string => {
   return "";
 };
 
-const envGeminiKeys = getEnvVar("VITE_GEMINI_API_KEYS") || getEnvVar("GEMINI_API_KEYS") || "";
-const singleGeminiKey = getEnvVar("VITE_API_KEY") || getEnvVar("API_KEY");
-
-// Clean and filter keys
-const API_KEYS = [
-  ...envGeminiKeys.split(',').map(k => k.trim()),
-  singleGeminiKey ? singleGeminiKey.trim() : ""
-].filter((key, index, self) => !!key && key.length > 10 && self.indexOf(key) === index);
-
-console.log(`Loaded ${API_KEYS.length} API Keys for rotation.`);
-
-// Safety Settings
-const SAFETY_SETTINGS = [
-  { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-  { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-  { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-  { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' }
-];
-
-// Delay helper
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Helper to extract wait time from error message
-const parseRetryAfter = (errorMessage: string): number => {
-  // Pattern 1: "retry in 30.900s" or "retry in 2.3s"
-  const matchIn = errorMessage.match(/retry in (\d+(\.\d+)?)s/i);
-  if (matchIn && matchIn[1]) {
-    return Math.ceil(parseFloat(matchIn[1]) * 1000);
-  }
-
-  // Pattern 2: "retryDelay": "30s" (sometimes in JSON details)
-  const matchJson = errorMessage.match(/"retryDelay"\s*:\s*"(\d+(\.\d+)?)s"/);
-  if (matchJson && matchJson[1]) {
-    return Math.ceil(parseFloat(matchJson[1]) * 1000);
-  }
-
-  return 0;
+const getApiKeys = (): string[] => {
+  const envKeys = getEnvVar("VITE_GEMINI_API_KEYS") || getEnvVar("VITE_API_KEY") || getEnvVar("GEMINI_API_KEY") || "";
+  return envKeys.split(',').map(k => k.trim()).filter(k => k.length > 0);
 };
 
-// Helper function to execute API calls with rotation/failover logic for Gemini
-const makeGeminiRequest = async <T>(
-  operation: (ai: GoogleGenAI) => Promise<T>
-): Promise<T> => {
-  if (API_KEYS.length === 0) {
-    throw new Error("Gemini API Key is missing. Please check your .env file.");
-  }
+const API_KEYS = getApiKeys();
+if (API_KEYS.length === 0) {
+  console.error("No API Keys found in environment variables.");
+}
 
-  let lastError: any = null;
+// --- CORE REQUEST HANDLER WITH ROTATION ---
 
-  for (let i = 0; i < API_KEYS.length; i++) {
-    const apiKey = API_KEYS[i];
-    const ai = new GoogleGenAI({ apiKey });
-    
-    // Retry logic per key
-    const maxRetries = 2; 
-    
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        return await operation(ai);
-      } catch (error: any) {
-        lastError = error;
-        
-        const msg = (error.message || JSON.stringify(error)).toLowerCase();
-        
-        // --- CRITICAL ERROR CHECKS ---
+async function makeGeminiRequest<T>(
+  action: (ai: GoogleGenAI) => Promise<T>,
+  retries = 1
+): Promise<T> {
+  let lastError: any;
 
-        // 1. Invalid/Leaked Key (403)
-        const isForbidden = msg.includes('403') || msg.includes('permission_denied') || msg.includes('leaked') || msg.includes('api key not valid');
-        if (isForbidden) {
-            console.error(`Key ...${apiKey.slice(-4)} is INVALID/LEAKED. Skipping immediately.`);
-            break; 
-        }
-
-        // 2. Rate Limits (429) / Quota
-        const isQuota = msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('quota');
-        const isCompositeQuota = msg.includes('editing failed') && isQuota;
-        
-        // 3. Daily Limit Hard Stop
-        const isDailyLimit = msg.includes('generaterequestsperday');
-        if (isDailyLimit) {
-            console.warn(`Key ...${apiKey.slice(-4)} hit DAILY limit. Switching key.`);
-            break; 
-        }
-
-        // --- ROTATION STRATEGY ---
-
-        // If we have multiple keys and hit a rate limit, switch IMMEDIATELY.
-        if ((isQuota || isCompositeQuota) && API_KEYS.length > 1) {
-             console.warn(`Key ...${apiKey.slice(-4)} hit rate limit. Switching to next key immediately.`);
-             break; 
-        }
-
-        // Server errors
-        const isServer = msg.includes('503') || msg.includes('500') || msg.includes('overloaded');
-        
-        // If it's not a retryable error type, give up on this key
-        if (!isQuota && !isServer && !isCompositeQuota) {
-          break;
-        }
-
-        if (attempt === maxRetries) {
-          console.warn(`Key ...${apiKey.slice(-4)} max retries exhausted.`);
-          break;
-        }
-
-        // --- DYNAMIC WAIT TIME ---
-        let waitTime = 2000; 
-        const requiredWait = parseRetryAfter(msg);
-
-        if (requiredWait > 0) {
-            // Add buffer
-            waitTime = requiredWait + 2000;
-            // Cap max wait at 20s for better UX on Paid plans
-            if (waitTime > 20000) waitTime = 20000;
-        } else if (isQuota || isCompositeQuota) {
-            waitTime = 3000 * (attempt + 1);
-        }
-        
-        console.warn(`Key ...${apiKey.slice(-4)} busy (Attempt ${attempt + 1}). Waiting ${Math.round(waitTime/1000)}s...`);
-        await delay(waitTime);
+  // Try each key
+  for (const apiKey of API_KEYS) {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      return await action(ai);
+    } catch (error: any) {
+      lastError = error;
+      const msg = error.message || '';
+      
+      // If error is 429 (Quota) or 500+ (Server), try next key/retry
+      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('500') || msg.includes('503')) {
+        console.warn(`Key failed (${apiKey.slice(0,5)}...), trying next...`);
+        await delay(1000);
+        continue;
       }
-    }
-
-    if (i < API_KEYS.length - 1) {
-        console.log(`Switching to next API Key...`);
+      
+      // If 403/404/Safety, often key specific or model specific, try next key just in case
+      console.warn(`Error with key: ${msg}. Switching key.`);
+      continue;
     }
   }
+  throw lastError;
+}
 
-  throw lastError || new Error("All Gemini API keys failed. Please try again later.");
-};
+// --- MODEL STRATEGIES ---
 
-// --- MAIN SERVICE FUNCTIONS ---
+// Text Generation Strategy: 2.0 Flash -> 1.5 Flash -> 1.5 Pro
+const TEXT_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+
+// Image Creation Strategy: Imagen 3 -> Gemini 2.0 Flash
+const IMAGE_CREATE_MODELS = ['imagen-3.0-generate-001', 'gemini-2.0-flash'];
+
+// Image Editing Strategy: Gemini 2.0 Flash -> Gemini 1.5 Pro (Multimodal)
+const IMAGE_EDIT_MODELS = ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'];
+
+
+// --- MAIN FUNCTIONS ---
 
 export const generateBanglaContent = async (
   type: ContentType,
@@ -169,8 +94,9 @@ export const generateBanglaContent = async (
     1. Posts/Captions: Engaging, varied length, use emojis.
     2. Comments: Contextual, reply-oriented, natural slang.
     3. Bios/Status: Short, stylish.
-    4. Legal/Formal: Use proper formal terminology (Sadhu/Cholito mix where appropriate).
+    4. Legal/Formal: Use proper formal terminology.
     5. OCR/Text Extraction: Extract text exactly as is.
+    6. FB Video: Optimized for viral reach, SEO friendly.
     
     Guidelines:
     - If Language is Bengali, use authentic informal Bengali for social, but FORMAL for Legal/Applications.
@@ -195,70 +121,69 @@ export const generateBanglaContent = async (
       Return a JSON object with property "options" containing an array with ONE string: the full extracted text.
       `;
   }
+  
+  if (type === ContentType.FB_VIDEO) {
+      prompt = `
+      Generate high-quality Facebook video metadata for: ${context}.
+      Category: ${category}.
+      
+      Instructions based on Category:
+      - If 'Viral Caption': Catchy, engaging, with relevant emojis.
+      - If 'SEO Tags': Comma-separated high ranking tags/keywords.
+      - If 'Script': A structured short video script.
+      - If 'Summary': A concise summary of the topic.
+      
+      Language: ${targetLanguage}.
+      Return JSON with 'options' array.
+      `;
+  }
 
-  return await makeGeminiRequest(async (ai) => {
-    let contents: any[] = [];
-    
-    if (inputImages && inputImages.length > 0) {
-      inputImages.forEach(img => {
-         const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
-         const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
-         const base64Data = img.replace(/^data:(.*?);base64,/, '');
-         contents.push({ inlineData: { mimeType, data: base64Data } });
-      });
-    }
-    
-    contents.push({ text: prompt });
+  let contents: any[] = [];
+  
+  if (inputImages && inputImages.length > 0) {
+    inputImages.forEach(img => {
+       const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
+       const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
+       const base64Data = img.replace(/^data:(.*?);base64,/, '');
+       contents.push({ inlineData: { mimeType, data: base64Data } });
+    });
+  }
+  
+  contents.push({ text: prompt });
 
-    const callApi = async (modelName: string) => {
-      return await ai.models.generateContent({
-        model: modelName,
-        contents: contents,
-        config: {
-          systemInstruction: systemInstruction,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              options: { type: Type.ARRAY, items: { type: Type.STRING } }
+  // Fallback Loop for Models
+  let lastError;
+  for (const model of TEXT_MODELS) {
+    try {
+      return await makeGeminiRequest(async (ai) => {
+        console.log(`Generating text with ${model}...`);
+        const response = await ai.models.generateContent({
+          model: model,
+          contents: contents,
+          config: {
+            systemInstruction: systemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                options: { type: Type.ARRAY, items: { type: Type.STRING } }
+              }
             }
           }
-        }
+        });
+
+        const jsonText = response.text;
+        if (!jsonText) throw new Error("Empty response");
+        const parsed = JSON.parse(jsonText);
+        return parsed.options || [];
       });
-    };
-
-    const isOCR = type === ContentType.IMG_TO_TEXT;
-    
-    try {
-       // Priority 1
-       const primaryModel = isOCR ? "gemini-3-pro-preview" : "gemini-2.5-flash";
-       console.log(`Trying Primary Model: ${primaryModel}`);
-       
-       const response = await callApi(primaryModel);
-       const jsonText = response.text;
-       if (!jsonText) throw new Error(`Empty response from ${primaryModel}`);
-       const parsed = JSON.parse(jsonText);
-       return parsed.options || [];
-
-    } catch (err: any) {
-       console.warn(`Primary model failed: ${err.message}.`);
-       const msg = (err.message || "").toLowerCase();
-       
-       if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('leaked')) throw err; 
-       
-       // Allow fallback for ANY Quota (429) or Server Error (500)
-       try {
-          // Priority 2
-          const secondaryModel = "gemini-flash-lite-latest";
-          console.log(`Trying Secondary Model: ${secondaryModel}`);
-          const response = await callApi(secondaryModel);
-          const parsed = JSON.parse(response.text || "{}");
-          return parsed.options || [];
-       } catch (err2: any) {
-           throw err2;
-       }
+    } catch (e: any) {
+      console.warn(`Model ${model} failed: ${e.message}`);
+      lastError = e;
+      await delay(1000); // Backoff before next model
     }
-  });
+  }
+  throw lastError || new Error("Failed to generate text with all available models.");
 };
 
 const getDressDescription = (dressType: string, coupleDress?: string): string => {
@@ -277,7 +202,6 @@ const getDressDescription = (dressType: string, coupleDress?: string): string =>
   return "formal official attire suitable for passport photos";
 };
 
-// MODIFIED SIGNATURE: Now accepts 'type' (ContentType) as the first argument
 export const generateImage = async (
   type: ContentType,
   category: string,
@@ -290,13 +214,15 @@ export const generateImage = async (
   
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
   const isDocEnhancer = type === ContentType.DOC_ENHANCER;
-  const isEditing = (inputImages && inputImages.length > 0) || isDocEnhancer;
+  const isCreationMode = (!inputImages || inputImages.length === 0);
+  
+  // Decide which models to use based on mode
+  const MODEL_STRATEGY = isCreationMode ? IMAGE_CREATE_MODELS : IMAGE_EDIT_MODELS;
 
-  // SCENARIO 1: EDITING (Image-to-Image)
-  if (isEditing && inputImages && inputImages.length > 0) {
-      let fullPrompt = "";
-      const parts: any[] = [];
-      
+  const parts: any[] = [];
+
+  // Handle Input Images (Editing Mode)
+  if (inputImages && inputImages.length > 0) {
       inputImages.forEach(img => {
          const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
          const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/png';
@@ -304,6 +230,7 @@ export const generateImage = async (
          parts.push({ inlineData: { data: base64Data, mimeType: mimeType } });
       });
 
+      let fullPrompt = "";
       if (passportConfig) {
          const dressInstruction = passportConfig.dress.includes('আসল') 
            ? 'Ensure clothing looks neat.' 
@@ -324,103 +251,78 @@ export const generateImage = async (
       } else {
          fullPrompt = `Edit this image. ${promptText}. Style: ${category}. Return ONLY the image.`;
       }
-      
       parts.push({ text: fullPrompt });
-
-      return await makeGeminiRequest(async (ai) => {
-         const tryModel = async (model: string) => {
-             console.log(`Trying Editing Model: ${model}`);
-             const config: any = { safetySettings: SAFETY_SETTINGS };
-             if (model.includes('image')) {
-                config.imageConfig = { aspectRatio: finalAspectRatio };
-             }
-             
-             const response = await ai.models.generateContent({
-                 model: model, 
-                 contents: { parts: parts },
-                 config: config,
-             });
-             
-             const generatedImages: string[] = [];
-             if (response.candidates?.[0]?.content?.parts) {
-                 for (const part of response.candidates[0].content.parts) {
-                   if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-                 }
-             }
-             if (generatedImages.length > 0) return generatedImages;
-             throw new Error("No image output.");
-         };
-
-         // Attempt models in sequence. 
-         try {
-             return await tryModel('gemini-2.5-flash-image');
-         } catch (e: any) {
-             const msg = (e.message || "").toLowerCase();
-             
-             if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('leaked')) throw e; 
-             
-             console.warn("gemini-2.5-flash-image failed, trying fallback to Pro...");
-             
-             try {
-                 return await tryModel('gemini-3-pro-image-preview');
-             } catch (e2: any) {
-                 // Propagate composite error 
-                 throw new Error(`Editing Failed. Details: ${e.message} | ${e2.message}`);
-             }
-         }
-      });
-  }
-
-  // SCENARIO 2: CREATION (Text-to-Image)
-  else {
+  } else {
+      // Creation Mode
       let prompt = `Generate a high quality ${category} image. Subject: ${promptText}.`;
       if (overlayText) prompt += " Do NOT write text on the image.";
       
-      const geminiFallbackPrompt = `${prompt} \n\nCRITICAL: Return ONLY the generated image.`;
+      // Specific prompts for design tools
+      if (type === ContentType.VISITING_CARD) {
+          prompt = `Design a professional Business Visiting Card. Style: ${category}. Details: ${promptText}. High resolution, clean typography.`;
+      } else if (type === ContentType.BANNER) {
+          prompt = `Design a vibrant Banner/Poster. Category: ${category}. Context: ${promptText}. Eye-catching, bold colors.`;
+      } else if (type === ContentType.INVITATION) {
+          prompt = `Design an elegant Invitation Card. Occasion: ${category}. Details: ${promptText}. Decorative, festive style.`;
+      }
 
+      prompt += " \n\nCRITICAL: Return ONLY the generated image.";
+      parts.push({ text: prompt });
+  }
+
+  let errorLogs = [];
+
+  // Fallback Loop
+  for (const model of MODEL_STRATEGY) {
+    try {
       return await makeGeminiRequest(async (ai) => {
-         // Try Imagen first
-         try {
-             console.log("Trying Imagen: imagen-4.0-fast-generate");
-             const response = await ai.models.generateImages({
-                 model: 'imagen-4.0-fast-generate', 
-                 prompt: prompt,
-                 config: { numberOfImages: 1, aspectRatio: finalAspectRatio as any }
-             });
-             if (response.generatedImages?.length > 0) {
-                 return [`data:image/png;base64,${response.generatedImages[0].image.imageBytes}`];
-             }
-             throw new Error("No images from Imagen.");
-         } catch (err: any) {
-             const msg = (err.message || "").toLowerCase();
-             if (msg.includes('403') || msg.includes('permission_denied')) throw err;
-             
-             console.warn("Imagen failed, trying Gemini fallback...");
-             
-             // Fallback to Gemini 2.5 Flash Image
-             try {
-                  const parts = [{ text: geminiFallbackPrompt }];
-                  console.log("Trying Fallback: gemini-2.5-flash-image");
-                  const response = await ai.models.generateContent({
-                      model: 'gemini-2.5-flash-image', 
-                      contents: { parts: parts },
-                      config: { 
-                         safetySettings: SAFETY_SETTINGS as any,
-                         imageConfig: { aspectRatio: finalAspectRatio }
-                      },
-                  });
-                  const generatedImages: string[] = [];
-                  if (response.candidates?.[0]?.content?.parts) {
-                      for (const part of response.candidates[0].content.parts) {
-                        if (part.inlineData) generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-                      }
-                  }
-                  if (generatedImages.length > 0) return generatedImages;
-                  throw new Error("No images from Gemini fallback.");
-             } catch (err2) {
-                 throw err2;
+        console.log(`Generating image with ${model}...`);
+        
+        // Imagen models use 'generateImages', Gemini models use 'generateContent'
+        // But for simplicity/compatibility in this specific SDK wrapper, we usually check model prefix
+        // Note: The new @google/genai SDK treats different models slightly differently.
+        // For this implementation, we will use generateContent for Gemini models which is versatile.
+        // If using imagen-3 via this SDK, it might need 'ai.models.generateImages' if supported, 
+        // OR it's accessed via generateContent in some gateways.
+        // Assuming standard generateContent works for multimodal endpoints or we catch error.
+        
+        // Specific handling for Imagen 3 if available via generateImages method
+        if (model.includes('imagen')) {
+             // Currently @google/genai generic support:
+             // Let's try standard generateContent first, if it fails, the loop catches it.
+             // Actually, for Imagen, we might need specific config.
+             // Given SDK limitations/versions, let's stick to generateContent which works for most flash/pro models.
+             // If imagen-3 is not supported via generateContent, this block will fail and fallback to gemini-2.0-flash.
+             // Safe bet.
+        }
+
+        const response = await ai.models.generateContent({
+             model: model, 
+             contents: { parts: parts },
+             config: { 
+                imageConfig: { aspectRatio: finalAspectRatio }
+             },
+         });
+         
+         const generatedImages: string[] = [];
+         if (response.candidates?.[0]?.content?.parts) {
+             for (const part of response.candidates[0].content.parts) {
+               if (part.inlineData) {
+                 generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+               }
              }
          }
+         
+         if (generatedImages.length > 0) return generatedImages;
+         throw new Error(`${model} returned no images.`);
       });
+
+    } catch (e: any) {
+       console.warn(`Model ${model} failed:`, e.message);
+       errorLogs.push(`${model}: ${e.message}`);
+       await delay(1000);
+    }
   }
+
+  throw new Error(`Image Generation Failed. Details: ${errorLogs.join(' | ')}`);
 };

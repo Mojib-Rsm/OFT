@@ -23,6 +23,8 @@ export enum ContentType {
   VISITING_CARD = 'ভিজিটিং কার্ড',
   BANNER = 'ব্যানার / ফ্লেক্স',
   INVITATION = 'ইনভাইটেশন কার্ড',
+  FB_VIDEO = 'ফেসবুক ভিডিও টুলস',
+  FB_DOWNLOADER = 'ফেসবুক ভিডিও ডাউনলোড',
   OTHER = 'অন্যান্য'
 }
 
@@ -218,6 +220,18 @@ export enum InvitationCategory {
   BIRTHDAY = 'জন্মদিন (Birthday)',
   HALKHATA = 'হালখাতা / উদ্বোধন',
   PARTY = 'পার্টি / দাওয়াত'
+}
+
+export enum FbVideoCategory {
+  CAPTION = 'ভাইরাল ক্যাপশন (Caption)',
+  TAGS = 'SEO ট্যাগস (Tags)',
+  SCRIPT = 'ভিডিও স্ক্রিপ্ট (Script)',
+  SUMMARY = 'ভিডিও সারসংক্ষেপ (Summary)'
+}
+
+export enum FbDownloaderCategory {
+  PUBLIC = 'পাবলিক ভিডিও',
+  REEL = 'ফেসবুক রিলস (Reels)'
 }
 
 export enum OtherCategory {

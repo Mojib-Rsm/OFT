@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Copy, Check, Share2, CornerDownRight, Download, Image as ImageIcon, Printer, Grid, Type, FileDown, FileText } from 'lucide-react';
+import { Copy, Check, Share2, CornerDownRight, Download, Image as ImageIcon, Printer, Grid, Type, FileDown, FileText, Video } from 'lucide-react';
 
 interface ResultCardProps {
   content: string;
@@ -11,12 +11,19 @@ interface ResultCardProps {
 const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) => {
   const [copied, setCopied] = useState(false);
   const isImage = content.startsWith('data:image');
+  const isVideoResult = content.startsWith('{"sd"') || content.startsWith('{"hd"') || content.startsWith('{"error"');
   const [displayContent, setDisplayContent] = useState<string>(content);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  
+  const [videoData, setVideoData] = useState<any>(null);
+
   // Effect to process image and overlay text if present
   useEffect(() => {
-    if (isImage && overlayText) {
+    if (isVideoResult) {
+       try {
+         setVideoData(JSON.parse(content));
+       } catch (e) {
+         console.error("Failed to parse video data", e);
+       }
+    } else if (isImage && overlayText) {
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.src = content;
@@ -71,7 +78,7 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
     } else {
         setDisplayContent(content);
     }
-  }, [content, overlayText, isImage]);
+  }, [content, overlayText, isImage, isVideoResult]);
 
   const handleCopy = async () => {
     try {
@@ -283,7 +290,37 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
         
         <div className="flex-1 p-5 sm:p-6 pl-7 flex flex-col gap-4">
           <div className="flex-grow">
-            {isImage ? (
+            {isVideoResult && videoData ? (
+               <div className="space-y-4">
+                  {videoData.error ? (
+                    <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm font-bangla border border-red-100">
+                       {videoData.error}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                       <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                         <Video className="text-blue-600" size={20} />
+                         ভিডিও ডাউনলোডের জন্য তৈরি
+                       </h3>
+                       <div className="flex flex-col gap-2">
+                          {videoData.hd && (
+                            <a href={videoData.hd} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold">
+                               <Download size={16} /> HD ভিডিও ডাউনলোড
+                            </a>
+                          )}
+                          {videoData.sd && (
+                            <a href={videoData.sd} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors font-semibold">
+                               <Download size={16} /> SD ভিডিও ডাউনলোড
+                            </a>
+                          )}
+                          {!videoData.hd && !videoData.sd && (
+                             <p className="text-amber-600 text-sm">কোনো ডাউনলোড লিংক পাওয়া যায়নি। ভিডিওটি হয়তো প্রাইভেট।</p>
+                          )}
+                       </div>
+                    </div>
+                  )}
+               </div>
+            ) : isImage ? (
               <div className="rounded-lg overflow-hidden bg-slate-100 border border-slate-200 relative group/img">
                 <img src={displayContent} alt="AI Generated" className="w-full h-auto object-contain max-h-[400px]" />
                 <div className="absolute inset-0 bg-black/5 opacity-0 group-hover/img:opacity-100 transition-opacity pointer-events-none"></div>
@@ -307,7 +344,7 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-slate-100 font-bangla mt-2 gap-3">
             <span className="flex items-center text-xs font-bold text-slate-400 uppercase tracking-wider gap-1 group-hover:text-indigo-500 transition-colors">
               <CornerDownRight size={12} strokeWidth={3} />
-              {isImage ? 'ইমেজ ফলাফল' : `অপশন ${index + 1}`}
+              {isImage ? 'ইমেজ ফলাফল' : isVideoResult ? 'ভিডিও ফলাফল' : `অপশন ${index + 1}`}
             </span>
             
             <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
@@ -350,7 +387,7 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
                      <span>সেভ</span>
                    </button>
                  </>
-               ) : (
+               ) : !isVideoResult && (
                  <>
                  {/* Word Download Button */}
                  <button

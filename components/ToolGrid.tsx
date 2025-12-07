@@ -29,7 +29,9 @@ import {
   CreditCard,
   Flag,
   Gift,
-  Files
+  Files,
+  Facebook,
+  Download
 } from 'lucide-react';
 import { ContentType } from '../types';
 
@@ -104,6 +106,8 @@ const ToolGrid: React.FC<ToolGridProps> = ({ onSelectTool }) => {
         { type: ContentType.AD_COPY, label: 'বিজ্ঞাপন / অ্যাড', icon: Megaphone, desc: 'মার্কেটিং কপি' },
         { type: ContentType.COMMENT, label: 'কমেন্ট রিপ্লাই', icon: MessageSquare, desc: 'স্মার্ট রিপ্লাই' },
         { type: ContentType.STORY, label: 'স্টোরি / স্ট্যাটাস', icon: Zap, desc: 'ছোট স্ট্যাটাস' },
+        { type: ContentType.FB_VIDEO, label: 'FB ভিডিও টুলস', icon: Facebook, desc: 'ক্যাপশন, ট্যাগ ও স্ক্রিপ্ট' },
+        { type: ContentType.FB_DOWNLOADER, label: 'ভিডিও ডাউনলোডার', icon: Download, desc: 'ফেসবুক ভিডিও সেভ' },
         { type: ContentType.SCRIPT, label: 'ভিডিও স্ক্রিপ্ট', icon: Video, desc: 'ভিডিও আইডিয়া' },
         { type: ContentType.OTHER, label: 'অন্যান্য', icon: MoreHorizontal, desc: 'এসএমএস ও অন্যান্য' },
       ]

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import InputSection from './components/InputSection';
@@ -7,6 +8,7 @@ import ToolGrid from './components/ToolGrid';
 import Toast from './components/Toast';
 import { ContentType, HistoryItem } from './types';
 import { generateBanglaContent, generateImage } from './services/geminiService';
+import { getFacebookVideo } from './services/fbDownloader';
 import { Sparkles, RefreshCcw } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -41,11 +43,12 @@ const App: React.FC = () => {
     tone?: string, 
     length?: string, 
     party?: string, 
-    aspectRatio?: string,
-    inputImages?: string[], // Changed to array
+    aspectRatio?: string, 
+    inputImages?: string[],
     passportConfig?: any,
     overlayText?: string,
-    userInstruction?: string
+    userInstruction?: string,
+    language?: string
   ) => {
     setIsLoading(true);
     setError(null);
@@ -55,35 +58,37 @@ const App: React.FC = () => {
     try {
       let generatedOptions: string[] = [];
 
-      // DEFINING IMAGE TOOLS: explicitly list all tools that should produce IMAGES
       const imageTools = [
         ContentType.IMAGE, 
         ContentType.THUMBNAIL, 
         ContentType.LOGO, 
         ContentType.PASSPORT, 
-        ContentType.BG_REMOVE,
-        ContentType.DOC_ENHANCER,     // Added
-        ContentType.VISITING_CARD,    // Added
-        ContentType.BANNER,           // Added
-        ContentType.INVITATION        // Added
+        ContentType.BG_REMOVE, 
+        ContentType.DOC_ENHANCER,     
+        ContentType.VISITING_CARD,    
+        ContentType.BANNER,           
+        ContentType.INVITATION        
       ];
 
-      // Check if it's an image tool
-      if (imageTools.includes(type)) {
-        // Now passing 'type' as the first argument to ensure the service knows exactly what tool it is
+      if (type === ContentType.FB_DOWNLOADER) {
+          // FB Downloader logic
+          const videoData = await getFacebookVideo(context);
+          generatedOptions = [JSON.stringify(videoData)];
+      } else if (imageTools.includes(type)) {
         generatedOptions = await generateImage(type, category, context, aspectRatio, inputImages, passportConfig, overlayText);
       } else {
-        // Pass inputImages for multimodal text generation (e.g. Screenshot Comments)
-        generatedOptions = await generateBanglaContent(type, category, context, tone, length, party, userInstruction, inputImages);
+        // Now passing the language parameter correctly
+        generatedOptions = await generateBanglaContent(type, category, context, tone, length, party, userInstruction, inputImages, language);
       }
       
       setResults(generatedOptions);
 
-      // Prepare data for history
       const isImageResult = imageTools.includes(type);
-      const historyResults = isImageResult
-        ? ['[Image Generated] - (ইমেজ সেভ করা হয়নি, স্টোরেজ বাঁচানোর জন্য)'] 
-        : generatedOptions;
+      const isVideoResult = type === ContentType.FB_DOWNLOADER;
+      
+      let historyResults = generatedOptions;
+      if (isImageResult) historyResults = ['[Image Generated] - (ইমেজ সেভ করা হয়নি, স্টোরেজ বাঁচানোর জন্য)'];
+      if (isVideoResult) historyResults = ['[Video Link Fetched]'];
 
       const newItem: HistoryItem = {
         id: Date.now().toString(),
@@ -96,32 +101,35 @@ const App: React.FC = () => {
         party,
         aspectRatio,
         results: historyResults,
-        inputImages: inputImages && inputImages.length > 0 ? inputImages : undefined, // Save raw images? Be careful with storage limits
+        inputImages: inputImages && inputImages.length > 0 ? inputImages : undefined, 
         passportConfig,
         overlayText,
-        userInstruction
+        userInstruction,
+        language
       };
       
       setHistory(prev => [newItem, ...prev]);
 
     } catch (err: any) {
       console.error(err);
-      // Detailed error message extraction
-      let errorMessage = "দুঃখিত, কন্টেন্ট তৈরি করা যায়নি। দয়া করে আবার চেষ্টা করুন।";
-      const msg = (err.message || "").toLowerCase();
+      
+      let errorMessage = "Something went wrong. Please check your API Key.";
+      const rawMessage = err.message || JSON.stringify(err);
 
-      // Standard Error Handling (Paid Tier friendly)
-      if (msg.includes('429') || msg.includes('quota') || msg.includes('resource_exhausted')) {
-         errorMessage = "সার্ভার বর্তমানে ব্যস্ত আছে (Quota Limit Reached)। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।";
-      } 
-      else if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('leaked')) {
-         errorMessage = "আপনার API Key টি সমস্যা করছে (Leaked/Invalid)। দয়া করে নতুন একটি API Key সেট করুন।";
-      }
-      else if (msg.includes('safety') || msg.includes('harm_category')) {
-         errorMessage = "আপনার রিকোয়েস্টটি এআই পলিসির কারণে ব্লক করা হয়েছে। দয়া করে শব্দ বা ছবি পরিবর্তন করে চেষ্টা করুন।";
-      } 
-      else if (msg.includes('503') || msg.includes('overloaded')) {
-         errorMessage = "গুগল সার্ভার ওভারলোডেড। দয়া করে কিছুক্ষণ পর চেষ্টা করুন।";
+      if (rawMessage.includes('limit: 0') || rawMessage.includes('free_tier')) {
+          errorMessage = "⚠️ বিলিং সমস্যা (Limit 0): আপনার API Key টি Free Tier হিসেবে ডিটেক্ট হচ্ছে যার ইমেজ জেনারেশন ক্ষমতা নেই।";
+      } else if (rawMessage.includes('429') || rawMessage.includes('RESOURCE_EXHAUSTED')) {
+         errorMessage = "সার্ভার ব্যস্ত (Quota Exceeded)। দয়া করে কিছুক্ষণ পর চেষ্টা করুন।";
+      } else if (rawMessage.includes('403') || rawMessage.includes('PERMISSION_DENIED')) {
+         errorMessage = "API Key পারমিশন নেই (403)। বিলিং চেক করুন অথবা নতুন Key ব্যবহার করুন।";
+      } else if (rawMessage.includes('404')) {
+         errorMessage = "মডেল সার্ভিস সাময়িকভাবে বন্ধ (404)।";
+      } else if (rawMessage.includes('SAFETY')) {
+         errorMessage = "নিরাপত্তা বা পলিসি কারণে কন্টেন্ট তৈরি করা সম্ভব হয়নি।";
+      } else if (rawMessage.includes('Failed to connect to download server')) {
+         errorMessage = "সার্ভারের সাথে সংযোগ স্থাপন করা যাচ্ছে না। দয়া করে নিশ্চিত করুন আপনার ব্যাকএন্ড (server.js) চালু আছে।";
+      } else {
+         errorMessage = `ত্রুটি: ${rawMessage.substring(0, 100)}...`;
       }
 
       setError(errorMessage);
@@ -138,14 +146,14 @@ const App: React.FC = () => {
   const handleViewChange = (newView: 'home' | 'history') => {
     setView(newView);
     if (newView === 'home') {
-      setSelectedTool(null); // Reset tool selection when going home
+      setSelectedTool(null); 
       setResults([]);
     }
   };
 
   const handleToolSelect = (type: ContentType) => {
     setSelectedTool(type);
-    setResults([]); // Clear previous results
+    setResults([]); 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -156,12 +164,10 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 font-bangla selection:bg-indigo-500/20 selection:text-indigo-900">
-      {/* Decorative Background Elements */}
       <div className="fixed top-0 left-0 right-0 h-96 bg-gradient-to-b from-indigo-50/80 to-transparent -z-10 pointer-events-none"></div>
       <div className="fixed top-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-200/20 rounded-full blur-3xl -z-10 animate-pulse pointer-events-none"></div>
       <div className="fixed bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-200/20 rounded-full blur-3xl -z-10 animate-pulse delay-700 pointer-events-none"></div>
 
-      {/* Toast Notification for Errors */}
       {error && (
         <Toast message={error} onClose={() => setError(null)} />
       )}
@@ -174,7 +180,6 @@ const App: React.FC = () => {
           <HistoryPage history={history} onClearHistory={clearHistory} />
         ) : (
           <>
-            {/* Show Hero only when no tool selected or when on landing */}
             {!selectedTool && (
               <div className="text-center py-6 sm:py-10 animate-in fade-in zoom-in duration-700 slide-in-from-bottom-4">
                 <div className="inline-flex items-center justify-center p-2 bg-indigo-50 rounded-2xl mb-6 ring-1 ring-indigo-100 shadow-sm">
@@ -191,7 +196,6 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {/* Main Content Area */}
             {selectedTool ? (
               <div className="max-w-4xl mx-auto space-y-8">
                  <InputSection 
@@ -199,10 +203,9 @@ const App: React.FC = () => {
                    onGenerate={handleGenerate} 
                    isLoading={isLoading} 
                    onBack={handleBackToGrid}
-                   key={selectedTool} // Force re-mount when tool changes
+                   key={selectedTool} 
                  />
 
-                  {/* Results Section */}
                   {results.length > 0 && (
                     <div className="space-y-6">
                       <div className="flex items-center justify-between text-slate-800 border-b border-slate-200 pb-4">
@@ -244,7 +247,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-8 mt-auto z-10">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <p className="text-slate-500 text-sm flex items-center justify-center gap-2 font-bangla font-semibold">

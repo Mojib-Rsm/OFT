@@ -8,11 +8,11 @@ import {
   StoryCategory, 
   NoteCategory, 
   ScriptCategory, 
-  EmailCategory,
-  AdCopyCategory,
-  PoemCategory,
-  PdfCategory,
-  ImgToTextCategory,
+  EmailCategory, 
+  AdCopyCategory, 
+  PoemCategory, 
+  PdfCategory, 
+  ImgToTextCategory, 
   ImageCategory, 
   ThumbnailCategory, 
   LogoCategory, 
@@ -23,16 +23,18 @@ import {
   BgRemoveCategory, 
   OtherCategory, 
   ContentTone, 
-  ContentLength,
+  ContentLength, 
   ContentLanguage, 
-  ImageAspectRatio,
-  DocEnhancerCategory,
-  LegalCategory,
-  ApplicationCategory,
-  CvCategory,
-  VisitingCardCategory,
-  BannerCategory,
-  InvitationCategory
+  ImageAspectRatio, 
+  DocEnhancerCategory, 
+  LegalCategory, 
+  ApplicationCategory, 
+  CvCategory, 
+  VisitingCardCategory, 
+  BannerCategory, 
+  InvitationCategory, 
+  FbVideoCategory,
+  FbDownloaderCategory
 } from '../types';
 import { 
   Wand2, 
@@ -54,28 +56,32 @@ import {
   UserSquare, 
   Eraser, 
   Upload, 
-  X,
-  ArrowLeft,
-  CheckCircle2,
-  Palette,
-  Shirt,
-  Globe,
-  Type,
-  PenLine,
-  Mail,
-  Megaphone,
-  Feather,
-  FileDown,
-  Users,
-  Plus,
-  ScanText,
-  Languages,
-  ScrollText,
-  FileBadge,
-  UserCheck,
-  CreditCard,
-  Flag as FlagIcon,
-  Gift
+  X, 
+  ArrowLeft, 
+  CheckCircle2, 
+  Palette, 
+  Shirt, 
+  Globe, 
+  Type, 
+  PenLine, 
+  Mail, 
+  Megaphone, 
+  Feather, 
+  FileDown, 
+  Users, 
+  Plus, 
+  ScanText, 
+  Languages, 
+  ScrollText, 
+  FileBadge, 
+  UserCheck, 
+  CreditCard, 
+  Flag as FlagIcon, 
+  Gift, 
+  Facebook,
+  Download,
+  Link,
+  Clipboard
 } from 'lucide-react';
 
 interface InputSectionProps {
@@ -161,6 +167,10 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [bannerCategory, setBannerCategory] = usePersistedState<string>('oft_cat_banner', BannerCategory.SHOP);
   const [invitationCategory, setInvitationCategory] = usePersistedState<string>('oft_cat_invite', InvitationCategory.WEDDING);
 
+  // FB Video
+  const [fbVideoCategory, setFbVideoCategory] = usePersistedState<string>('oft_cat_fb_video', FbVideoCategory.CAPTION);
+  const [fbDownloaderCategory, setFbDownloaderCategory] = usePersistedState<string>('oft_cat_fb_dl', FbDownloaderCategory.PUBLIC);
+
   // Passport
   const [ppCountry, setPpCountry] = usePersistedState<string>('oft_pp_country', PassportCountry.BD);
   const [ppBg, setPpBg] = usePersistedState<string>('oft_pp_bg', PassportBg.WHITE);
@@ -211,6 +221,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.VISITING_CARD: return visitingCardCategory;
       case ContentType.BANNER: return bannerCategory;
       case ContentType.INVITATION: return invitationCategory;
+      case ContentType.FB_VIDEO: return fbVideoCategory;
+      case ContentType.FB_DOWNLOADER: return fbDownloaderCategory;
       case ContentType.OTHER: return otherCategory;
       default: return '';
     }
@@ -256,6 +268,15 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); };
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); const file = e.dataTransfer.files?.[0]; if (file) processFile(file); };
 
+  const handlePasteLink = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setContext(text);
+    } catch (err) {
+      console.error('Failed to read clipboard', err);
+    }
+  };
+
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       if (!supportsImageUpload(activeTab)) return;
@@ -291,7 +312,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     if (activeTab === ContentType.LOGO) finalAspectRatio = ImageAspectRatio.SQUARE;
     if (activeTab === ContentType.PASSPORT) finalAspectRatio = ImageAspectRatio.TALL;
     if (activeTab === ContentType.VISITING_CARD) finalAspectRatio = ImageAspectRatio.LANDSCAPE;
-    if (activeTab === ContentType.BANNER) finalAspectRatio = ImageAspectRatio.WIDE; // Banner typically wide
+    if (activeTab === ContentType.BANNER) finalAspectRatio = ImageAspectRatio.WIDE; 
     if (activeTab === ContentType.INVITATION) finalAspectRatio = ImageAspectRatio.PORTRAIT;
 
     const passportConfig = activeTab === ContentType.PASSPORT ? {
@@ -362,6 +383,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.VISITING_CARD: categories = VisitingCardCategory; currentValue = visitingCardCategory; setter = setVisitingCardCategory; break;
       case ContentType.BANNER: categories = BannerCategory; currentValue = bannerCategory; setter = setBannerCategory; break;
       case ContentType.INVITATION: categories = InvitationCategory; currentValue = invitationCategory; setter = setInvitationCategory; break;
+      case ContentType.FB_VIDEO: categories = FbVideoCategory; currentValue = fbVideoCategory; setter = setFbVideoCategory; break;
+      case ContentType.FB_DOWNLOADER: categories = FbDownloaderCategory; currentValue = fbDownloaderCategory; setter = setFbDownloaderCategory; break;
       case ContentType.OTHER: categories = OtherCategory; currentValue = otherCategory; setter = setOtherCategory; break;
     }
 
@@ -384,6 +407,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.VISITING_CARD: return "উদাহরণ: নাম, পদবী, মোবাইল, ঠিকানা...";
       case ContentType.BANNER: return "উদাহরণ: দোকানের নাম, অফার, স্থান...";
       case ContentType.INVITATION: return "উদাহরণ: পাত্র-পাত্রীর নাম, তারিখ, স্থান...";
+      case ContentType.FB_VIDEO: return "ভিডিওর বিষয়বস্তু বা লিংক দিন...";
+      case ContentType.FB_DOWNLOADER: return "ভিডিওর লিংক এখানে পেস্ট করুন...";
       default: return "বিষয়বস্তু / তথ্য লিখুন...";
     }
   };
@@ -489,6 +514,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           <TabButton type={ContentType.COMMENT} icon={MessageSquare} label="কমেন্ট" />
           <TabButton type={ContentType.STORY} icon={Zap} label="স্টোরি" />
           <TabButton type={ContentType.BIO} icon={User} label="বায়ো" />
+          <TabButton type={ContentType.FB_VIDEO} icon={Facebook} label="FB ভিডিও" />
+          <TabButton type={ContentType.FB_DOWNLOADER} icon={Download} label="ভিডিও ডাউনলোড" />
           <TabButton type={ContentType.SCRIPT} icon={Video} label="স্ক্রিপ্ট" />
           <TabButton type={ContentType.OTHER} icon={MoreHorizontal} label="অন্যান্য" />
         </div>
@@ -535,7 +562,31 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           </div>
         )}
 
-        {activeTab !== ContentType.PASSPORT && (
+        {/* Improved UI for FB Downloader (Hidden category, Prominent Input) */}
+        {activeTab === ContentType.FB_DOWNLOADER ? (
+            <div className="space-y-4 animate-in fade-in">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1 flex items-center gap-1">
+                 <Link size={12}/> ফেসবুক ভিডিও লিংক
+              </label>
+              <div className="flex gap-2">
+                 <input
+                    value={context}
+                    onChange={(e) => setContext(e.target.value)}
+                    placeholder="https://www.facebook.com/..."
+                    className="w-full bg-white border border-slate-200 text-slate-800 text-sm rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 block p-4 shadow-sm transition-all"
+                 />
+                 <button 
+                   type="button" 
+                   onClick={handlePasteLink}
+                   className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 rounded-xl border border-slate-200 transition-colors flex items-center gap-2 font-bangla font-semibold"
+                 >
+                    <Clipboard size={18} /> Paste
+                 </button>
+              </div>
+              <p className="text-[11px] text-slate-400 font-bangla">পাবলিক রিলস বা ভিডিও লিংক দিন। প্রাইভেট ভিডিও ডাউনলোড হবে না।</p>
+            </div>
+        ) : (
+          activeTab !== ContentType.PASSPORT && (
           <div className="grid grid-cols-1 gap-6">
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
@@ -559,6 +610,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
               </div>
             )}
           </div>
+          )
         )}
 
         {supportsImageUpload(activeTab) && (
@@ -596,6 +648,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
                {renderDynamicInputs()}
             </>
         ) : (
+            // Hide main textarea if FB Downloader because we have a special input for it
+            activeTab !== ContentType.FB_DOWNLOADER && (
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
                 {activeTab === ContentType.IMG_TO_TEXT ? "নির্দেশনা (অপশনাল)" : activeTab === ContentType.IMAGE || activeTab === ContentType.THUMBNAIL || activeTab === ContentType.LOGO || activeTab === ContentType.VISITING_CARD || activeTab === ContentType.BANNER || activeTab === ContentType.INVITATION ? "ইমেজ প্রম্পট / বিষয়বস্তু / লেখা" : "বিষয়বস্তু / প্রসঙ্গ / তথ্য"}
@@ -607,6 +661,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
                 className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 block p-4 transition-all resize-none font-bangla h-28 hover:bg-white"
               />
             </div>
+            )
         )}
 
         {supportsOverlayText(activeTab) && (
@@ -636,7 +691,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
            </div>
         )}
 
-        {!isImageTool(activeTab) && activeTab !== ContentType.PASSPORT && activeTab !== ContentType.IMG_TO_TEXT && (
+        {!isImageTool(activeTab) && activeTab !== ContentType.PASSPORT && activeTab !== ContentType.IMG_TO_TEXT && activeTab !== ContentType.FB_DOWNLOADER && (
           <div className="border-t border-slate-100 pt-4">
             <button
               type="button"
@@ -711,12 +766,12 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           {isLoading ? (
             <>
               <Loader2 size={20} className="animate-spin" />
-              <span>তৈরি হচ্ছে...</span>
+              <span>প্রসেস হচ্ছে...</span>
             </>
           ) : (
             <>
-              {activeTab === ContentType.IMG_TO_TEXT ? <ScanText size={20} /> : <Wand2 size={20} />}
-              <span>{activeTab === ContentType.IMG_TO_TEXT ? 'টেক্সট এক্সট্রাক্ট করুন' : 'জেনারেট করুন'}</span>
+              {activeTab === ContentType.IMG_TO_TEXT ? <ScanText size={20} /> : activeTab === ContentType.FB_DOWNLOADER ? <Download size={20} /> : <Wand2 size={20} />}
+              <span>{activeTab === ContentType.IMG_TO_TEXT ? 'টেক্সট এক্সট্রাক্ট করুন' : activeTab === ContentType.FB_DOWNLOADER ? 'ভিডিও লিংক পান' : 'জেনারেট করুন'}</span>
             </>
           )}
         </button>
