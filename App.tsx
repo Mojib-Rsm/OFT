@@ -5,14 +5,14 @@ import InputSection from './components/InputSection';
 import ResultCard from './components/ResultCard';
 import HistoryPage from './components/HistoryPage';
 import ToolGrid from './components/ToolGrid';
+import DownloaderPage from './components/DownloaderPage';
 import Toast from './components/Toast';
 import { ContentType, HistoryItem } from './types';
 import { generateBanglaContent, generateImage } from './services/geminiService';
-import { getFacebookVideo } from './services/fbDownloader';
 import { Sparkles, RefreshCcw } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'home' | 'history'>('home');
+  const [view, setView] = useState<'home' | 'history' | 'downloader'>('home');
   const [selectedTool, setSelectedTool] = useState<ContentType | null>(null);
   
   const [results, setResults] = useState<string[]>([]);
@@ -70,25 +70,18 @@ const App: React.FC = () => {
         ContentType.INVITATION        
       ];
 
-      if (type === ContentType.FB_DOWNLOADER) {
-          // FB Downloader logic
-          const videoData = await getFacebookVideo(context);
-          generatedOptions = [JSON.stringify(videoData)];
-      } else if (imageTools.includes(type)) {
+      if (imageTools.includes(type)) {
         generatedOptions = await generateImage(type, category, context, aspectRatio, inputImages, passportConfig, overlayText);
       } else {
-        // Now passing the language parameter correctly
         generatedOptions = await generateBanglaContent(type, category, context, tone, length, party, userInstruction, inputImages, language);
       }
       
       setResults(generatedOptions);
 
       const isImageResult = imageTools.includes(type);
-      const isVideoResult = type === ContentType.FB_DOWNLOADER;
       
       let historyResults = generatedOptions;
       if (isImageResult) historyResults = ['[Image Generated] - (ইমেজ সেভ করা হয়নি, স্টোরেজ বাঁচানোর জন্য)'];
-      if (isVideoResult) historyResults = ['[Video Link Fetched]'];
 
       const newItem: HistoryItem = {
         id: Date.now().toString(),
@@ -126,8 +119,6 @@ const App: React.FC = () => {
          errorMessage = "মডেল সার্ভিস সাময়িকভাবে বন্ধ (404)।";
       } else if (rawMessage.includes('SAFETY')) {
          errorMessage = "নিরাপত্তা বা পলিসি কারণে কন্টেন্ট তৈরি করা সম্ভব হয়নি।";
-      } else if (rawMessage.includes('Failed to connect to download server')) {
-         errorMessage = "সার্ভারের সাথে সংযোগ স্থাপন করা যাচ্ছে না। দয়া করে নিশ্চিত করুন আপনার ব্যাকএন্ড (server.js) চালু আছে।";
       } else {
          errorMessage = `ত্রুটি: ${rawMessage.substring(0, 100)}...`;
       }
@@ -143,7 +134,7 @@ const App: React.FC = () => {
     localStorage.removeItem('banglaSocialHistory');
   };
 
-  const handleViewChange = (newView: 'home' | 'history') => {
+  const handleViewChange = (newView: 'home' | 'history' | 'downloader') => {
     setView(newView);
     if (newView === 'home') {
       setSelectedTool(null); 
@@ -152,6 +143,12 @@ const App: React.FC = () => {
   };
 
   const handleToolSelect = (type: ContentType) => {
+    // Special check for Downloader redirect
+    if (type === ContentType.FB_DOWNLOADER) {
+      setView('downloader');
+      return;
+    }
+    
     setSelectedTool(type);
     setResults([]); 
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -176,7 +173,9 @@ const App: React.FC = () => {
       
       <main className="flex-grow max-w-5xl mx-auto w-full px-4 sm:px-6 py-24 space-y-8 relative z-0">
         
-        {view === 'history' ? (
+        {view === 'downloader' ? (
+           <DownloaderPage onBack={() => setView('home')} />
+        ) : view === 'history' ? (
           <HistoryPage history={history} onClearHistory={clearHistory} />
         ) : (
           <>

@@ -1,9 +1,10 @@
+
 import React from 'react';
-import { PenTool, History, Home } from 'lucide-react';
+import { PenTool, History, Home, Download } from 'lucide-react';
 
 interface HeaderProps {
-  currentView: 'home' | 'history';
-  onViewChange: (view: 'home' | 'history') => void;
+  currentView: 'home' | 'history' | 'downloader';
+  onViewChange: (view: 'home' | 'history' | 'downloader') => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ currentView, onViewChange }) => {
@@ -31,10 +32,10 @@ const Header: React.FC<HeaderProps> = ({ currentView, onViewChange }) => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex items-center bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/50">
+          <nav className="flex items-center bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/50 overflow-x-auto scrollbar-hide max-w-[200px] sm:max-w-none">
             <button
               onClick={() => onViewChange('home')}
-              className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 font-bangla ${
+              className={`flex items-center space-x-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 font-bangla whitespace-nowrap ${
                 currentView === 'home'
                   ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200'
                   : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
@@ -44,8 +45,19 @@ const Header: React.FC<HeaderProps> = ({ currentView, onViewChange }) => {
               <span className="hidden sm:inline">হোম</span>
             </button>
             <button
+              onClick={() => onViewChange('downloader')}
+              className={`flex items-center space-x-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 font-bangla whitespace-nowrap ${
+                currentView === 'downloader'
+                  ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+              }`}
+            >
+              <Download size={16} strokeWidth={2.5} />
+              <span className="hidden sm:inline">ডাউনলোডার</span>
+            </button>
+            <button
               onClick={() => onViewChange('history')}
-              className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 font-bangla ${
+              className={`flex items-center space-x-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 font-bangla whitespace-nowrap ${
                 currentView === 'history'
                   ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200'
                   : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
