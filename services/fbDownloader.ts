@@ -2,22 +2,21 @@
 export interface FbVideoResponse {
   sd?: string;
   hd?: string;
+  thumbnail?: string;
+  title?: string;
   error?: string;
 }
 
 export async function getFacebookVideo(url: string): Promise<FbVideoResponse> {
   if (!url) return { error: "Please provide a valid Facebook video URL" };
 
-  // Helper to clean extracted URLs from JSON/HTML
+  // Helper to clean extracted URLs
   const cleanUrl = (link: string) => {
       if (!link) return undefined;
       let cleaned = link;
-      
-      // Fix common JSON escapes and unicode
       cleaned = cleaned.replace(/\\u0026/g, "&")
                        .replace(/\\u0025/g, "%")
-                       .replace(/\\/g, ""); // Remove backslashes
-      
+                       .replace(/\\/g, "");
       try {
         return decodeURIComponent(cleaned);
       } catch (e) {
@@ -25,99 +24,113 @@ export async function getFacebookVideo(url: string): Promise<FbVideoResponse> {
       }
   };
 
-  // Proxies to bypass CORS. 
-  // 'corsproxy.io' is usually most effective for FB. 'allorigins' is a backup.
-  const proxies = [
-      (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-      (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}&t=${Date.now()}`,
-      (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`
+  // Proxies
+  // We use parallel fetching to speed up the process significantly
+  const getProxifiedUrls = (targetUrl: string) => [
+      `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+      // Add a cache buster to prevent stale data
+      `https://thingproxy.freeboard.io/fetch/${targetUrl}` 
   ];
 
-  // URL Variant Strategy:
-  // 1. mbasic: Often returns a simple HTML with a redirect link (safest parsing).
-  // 2. www: Returns big HTML with JSON blobs (contains HD links, but harder to parse).
-  let variants: string[] = [];
+  // Prepare URL variants
+  let targetUrls: string[] = [];
   
-  // Normalize input to generate variants
   if (url.match(/(facebook|fb)\.com/)) {
-      // Create mbasic version
+      // 1. mbasic (Fastest & Easiest to parse)
       const mbasic = url.replace(/(www|web|m)\.facebook\.com/, 'mbasic.facebook.com');
-      // Create www version
+      // 2. www (Contains JSON blobs for HD)
       const www = url.replace(/(mbasic|m|web)\.facebook\.com/, 'www.facebook.com');
       
-      // Try mbasic first as it's lighter and often works better with proxies, 
-      // but ensure we also have the original or www version for HD data.
-      variants = [mbasic, www];
-      
-      // If the input didn't contain a subdomain (e.g. facebook.com/...), add explicit ones
-      if (!url.includes('www.') && !url.includes('mbasic.') && !url.includes('m.')) {
-          variants = [`https://mbasic.facebook.com${new URL(url).pathname}`, `https://www.facebook.com${new URL(url).pathname}`];
-      }
+      targetUrls = [mbasic, www];
   } else {
-      variants = [url];
+      targetUrls = [url];
   }
 
-  // Remove duplicates
-  variants = [...new Set(variants)];
+  // Flatten into a list of all Proxy + URL combinations
+  const requestPromises: Promise<string>[] = [];
 
-  console.log("Starting FB Video fetch process...", variants);
+  targetUrls.forEach(tUrl => {
+      getProxifiedUrls(tUrl).forEach(pUrl => {
+          requestPromises.push(
+              fetch(pUrl, { 
+                  headers: { 
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' 
+                  } 
+              })
+              .then(res => {
+                  if (!res.ok) throw new Error('Network response was not ok');
+                  return res.text();
+              })
+              .then(text => {
+                  if(text.length < 100) throw new Error('Empty response');
+                  return text;
+              })
+          );
+      });
+  });
 
-  for (const targetUrl of variants) {
-      for (const proxyGen of proxies) {
-          try {
-              const proxyUrl = proxyGen(targetUrl);
-              // console.log(`Trying: ${targetUrl} via proxy`);
-              
-              const response = await fetch(proxyUrl);
-              if (!response.ok) continue;
-              
-              const html = await response.text();
-              if (!html || html.length < 100) continue;
+  try {
+      // RACE: Wait for the FIRST successful response (Speed Optimization)
+      // We use Promise.any to ignore failures and get the first success
+      const html = await (Promise as any).any(requestPromises);
 
-              // --- PARSING LOGIC ---
+      // --- PARSING ---
+      let sd = undefined;
+      let hd = undefined;
+      let thumbnail = undefined;
+      let title = "Facebook Video";
 
-              // 1. mbasic redirect (High confidence)
-              // Pattern: href="/video_redirect/?src=..."
-              const redirectMatch = html.match(/href\s*=\s*["']\/video_redirect\/\?src=([^"']+)["']/);
-              if (redirectMatch && redirectMatch[1]) {
-                   const decodedLink = cleanUrl(redirectMatch[1]);
-                   if (decodedLink) {
-                       return { sd: decodedLink, hd: decodedLink }; 
-                   }
-              }
+      // 1. Extract Thumbnail (og:image)
+      const thumbMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/);
+      if (thumbMatch && thumbMatch[1]) {
+          thumbnail = cleanUrl(thumbMatch[1]);
+      }
 
-              // 2. JSON data blobs (Common in www)
-              // We look for specific keys that hold the MP4 urls
-              const hdMatch = html.match(/"hd_src"\s*:\s*"([^"]+)"/) || 
-                              html.match(/"browser_native_hd_url"\s*:\s*"([^"]+)"/) || 
-                              html.match(/playable_url_quality_hd"\s*:\s*"([^"]+)"/);
-                              
-              const sdMatch = html.match(/"sd_src"\s*:\s*"([^"]+)"/) || 
-                              html.match(/"browser_native_sd_url"\s*:\s*"([^"]+)"/) || 
-                              html.match(/playable_url"\s*:\s*"([^"]+)"/);
+      // 2. Extract Title (og:title)
+      const titleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/);
+      if (titleMatch && titleMatch[1]) {
+          title = cleanUrl(titleMatch[1]) || "Facebook Video";
+      }
 
-              if (hdMatch || sdMatch) {
-                  return {
-                      hd: hdMatch ? cleanUrl(hdMatch[1]) : undefined,
-                      sd: sdMatch ? cleanUrl(sdMatch[1]) : undefined
-                  };
-              }
+      // 3. Extract Video Links (HD/SD)
+      
+      // Method A: JSON extraction (Common in www)
+      const hdMatch = html.match(/"hd_src"\s*:\s*"([^"]+)"/) || 
+                      html.match(/"browser_native_hd_url"\s*:\s*"([^"]+)"/) || 
+                      html.match(/playable_url_quality_hd"\s*:\s*"([^"]+)"/);
+                      
+      const sdMatch = html.match(/"sd_src"\s*:\s*"([^"]+)"/) || 
+                      html.match(/"browser_native_sd_url"\s*:\s*"([^"]+)"/) || 
+                      html.match(/playable_url"\s*:\s*"([^"]+)"/);
 
-              // 3. OpenGraph Tag (Fallback)
-              const metaMatch = html.match(/<meta\s+property="og:video"\s+content="([^"]+)"/);
-              if (metaMatch && metaMatch[1]) {
-                   const link = cleanUrl(metaMatch[1]);
-                   if (link) return { sd: link };
-              }
+      if (hdMatch) hd = cleanUrl(hdMatch[1]);
+      if (sdMatch) sd = cleanUrl(sdMatch[1]);
 
-              // If we reach here, this specific proxy+url combo didn't yield a video.
-              // Continue to next combination.
-
-          } catch (e) {
-              console.warn(`Fetch failed for ${targetUrl}`, e);
+      // Method B: Redirect extraction (Common in mbasic)
+      if (!sd && !hd) {
+          const redirectMatch = html.match(/href\s*=\s*["']\/video_redirect\/\?src=([^"']+)["']/);
+          if (redirectMatch && redirectMatch[1]) {
+              sd = cleanUrl(redirectMatch[1]);
           }
       }
-  }
 
-  return { error: "ভিডিও লিংক খুঁজে পাওয়া যায়নি। ভিডিওটি পাবলিক কিনা নিশ্চিত করুন।" };
+      // Method C: OpenGraph Video (Fallback)
+      if (!sd && !hd) {
+          const metaMatch = html.match(/<meta\s+property="og:video"\s+content="([^"]+)"/);
+          if (metaMatch && metaMatch[1]) {
+              sd = cleanUrl(metaMatch[1]);
+          }
+      }
+
+      if (!sd && !hd) {
+          throw new Error("No video links found");
+      }
+
+      return { sd, hd, thumbnail, title };
+
+  } catch (error) {
+      console.error("All proxies failed or no video found", error);
+      return { error: "ভিডিওটি প্রাইভেট অথবা লিংকটি কাজ করছে না। দয়া করে পাবলিক ভিডিও লিংক দিন।" };
+  }
 }

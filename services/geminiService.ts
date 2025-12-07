@@ -60,14 +60,14 @@ async function makeGeminiRequest<T>(
 
 // --- MODEL STRATEGIES ---
 
-// Text Generation Strategy: 2.0 Flash -> 1.5 Flash -> 1.5 Pro
-const TEXT_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+// Text Generation Strategy: gemini-2.5-flash -> gemini-3-pro-preview
+const TEXT_MODELS = ['gemini-2.5-flash', 'gemini-3-pro-preview'];
 
-// Image Creation Strategy: Imagen 3 -> Gemini 2.0 Flash
-const IMAGE_CREATE_MODELS = ['imagen-3.0-generate-001', 'gemini-2.0-flash'];
+// Image Creation Strategy: gemini-2.5-flash-image
+const IMAGE_CREATE_MODELS = ['gemini-2.5-flash-image'];
 
-// Image Editing Strategy: Gemini 2.0 Flash -> Gemini 1.5 Pro (Multimodal)
-const IMAGE_EDIT_MODELS = ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'];
+// Image Editing Strategy: gemini-2.5-flash-image
+const IMAGE_EDIT_MODELS = ['gemini-2.5-flash-image'];
 
 
 // --- MAIN FUNCTIONS ---
@@ -278,24 +278,6 @@ export const generateImage = async (
       return await makeGeminiRequest(async (ai) => {
         console.log(`Generating image with ${model}...`);
         
-        // Imagen models use 'generateImages', Gemini models use 'generateContent'
-        // But for simplicity/compatibility in this specific SDK wrapper, we usually check model prefix
-        // Note: The new @google/genai SDK treats different models slightly differently.
-        // For this implementation, we will use generateContent for Gemini models which is versatile.
-        // If using imagen-3 via this SDK, it might need 'ai.models.generateImages' if supported, 
-        // OR it's accessed via generateContent in some gateways.
-        // Assuming standard generateContent works for multimodal endpoints or we catch error.
-        
-        // Specific handling for Imagen 3 if available via generateImages method
-        if (model.includes('imagen')) {
-             // Currently @google/genai generic support:
-             // Let's try standard generateContent first, if it fails, the loop catches it.
-             // Actually, for Imagen, we might need specific config.
-             // Given SDK limitations/versions, let's stick to generateContent which works for most flash/pro models.
-             // If imagen-3 is not supported via generateContent, this block will fail and fallback to gemini-2.0-flash.
-             // Safe bet.
-        }
-
         const response = await ai.models.generateContent({
              model: model, 
              contents: { parts: parts },
