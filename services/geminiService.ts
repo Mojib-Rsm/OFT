@@ -248,6 +248,12 @@ export const generateImage = async (
          Return ONLY the image.`;
       } else if (isDocEnhancer) {
          fullPrompt = `Act as a Document Scanner. Enhance this document: Remove shadows, make background white, sharpen text. Return ONLY the image.`;
+      } else if (type === ContentType.PHOTO_ENHANCER) {
+         if (category.includes('Upscale')) fullPrompt = `Act as a High-End Photo Enhancer. Upscale this image to 4K resolution, sharpen details, and reduce noise. Return ONLY the image.`;
+         else if (category.includes('Restore')) fullPrompt = `Act as a Photo Restoration Expert. Restore this old/damaged photo. Fix scratches, tears, and fade. Return ONLY the image.`;
+         else if (category.includes('Colorize')) fullPrompt = `Act as a Colorization Expert. Colorize this black and white photo naturally. Return ONLY the image.`;
+         else if (category.includes('Face')) fullPrompt = `Act as a Portrait Enhancer. Fix blurry faces, improve skin texture, and sharpen eyes while keeping identity. Return ONLY the image.`;
+         else fullPrompt = `Enhance this photo. Improve lighting, sharpness, and clarity. Return ONLY the image.`;
       } else {
          fullPrompt = `Edit this image. ${promptText}. Style: ${category}. Return ONLY the image.`;
       }

@@ -31,7 +31,8 @@ import {
   Gift,
   Files,
   Facebook,
-  Download
+  Download,
+  Wand
 } from 'lucide-react';
 import { ContentType } from '../types';
 
@@ -90,6 +91,7 @@ const ToolGrid: React.FC<ToolGridProps> = ({ onSelectTool }) => {
         { type: ContentType.THUMBNAIL, label: 'থাম্বনেইল', icon: Crop, desc: 'ইউটিউব থাম্বনেইল' },
         { type: ContentType.IMAGE, label: 'এআই ইমেজ', icon: Sparkles, desc: 'যেকোনো ছবি তৈরি' },
         { type: ContentType.BG_REMOVE, label: 'ব্যাকগ্রাউন্ড', icon: Eraser, desc: 'ব্যাকগ্রাউন্ড পরিবর্তন' },
+        { type: ContentType.PHOTO_ENHANCER, label: 'ফটো এনহ্যান্সার', icon: Wand, desc: 'ছবি ক্লিয়ার ও রঙিন' },
       ]
     },
     {

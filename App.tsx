@@ -67,7 +67,8 @@ const App: React.FC = () => {
         ContentType.DOC_ENHANCER,     
         ContentType.VISITING_CARD,    
         ContentType.BANNER,           
-        ContentType.INVITATION        
+        ContentType.INVITATION,
+        ContentType.PHOTO_ENHANCER
       ];
 
       if (imageTools.includes(type)) {

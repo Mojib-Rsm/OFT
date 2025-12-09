@@ -33,7 +33,8 @@ import {
   VisitingCardCategory, 
   BannerCategory, 
   InvitationCategory, 
-  FbVideoCategory
+  FbVideoCategory,
+  PhotoEnhancerCategory
 } from '../types';
 import { 
   Wand2, 
@@ -77,7 +78,8 @@ import {
   CreditCard, 
   Flag as FlagIcon, 
   Gift, 
-  Facebook
+  Facebook,
+  Wand
 } from 'lucide-react';
 
 interface InputSectionProps {
@@ -150,6 +152,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [thumbnailCategory, setThumbnailCategory] = usePersistedState<string>('oft_cat_thumbnail', ThumbnailCategory.YOUTUBE);
   const [logoCategory, setLogoCategory] = usePersistedState<string>('oft_cat_logo', LogoCategory.MINIMALIST);
   const [bgRemoveCategory, setBgRemoveCategory] = usePersistedState<string>('oft_cat_bg', BgRemoveCategory.WHITE);
+  const [photoEnhancerCategory, setPhotoEnhancerCategory] = usePersistedState<string>('oft_cat_photo_enhance', PhotoEnhancerCategory.UPSCALE);
   const [otherCategory, setOtherCategory] = usePersistedState<string>('oft_cat_other', OtherCategory.BIRTHDAY);
   
   // New Categories for Computer Shop
@@ -209,6 +212,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.LOGO: return logoCategory;
       case ContentType.PASSPORT: return 'Passport';
       case ContentType.BG_REMOVE: return bgRemoveCategory;
+      case ContentType.PHOTO_ENHANCER: return photoEnhancerCategory;
       case ContentType.DOC_ENHANCER: return docEnhancerCategory;
       case ContentType.LEGAL: return legalCategory;
       case ContentType.APPLICATION: return applicationCategory;
@@ -225,11 +229,11 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const isPolitical = (category: string) => category.includes('রাজনৈতিক');
   const isImageTool = (type: ContentType) => [
       ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.LOGO, ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.DOC_ENHANCER,
-      ContentType.VISITING_CARD, ContentType.BANNER, ContentType.INVITATION
+      ContentType.VISITING_CARD, ContentType.BANNER, ContentType.INVITATION, ContentType.PHOTO_ENHANCER
   ].includes(type);
 
   const supportsImageUpload = (type: ContentType) => isImageTool(type) || type === ContentType.COMMENT || type === ContentType.IMG_TO_TEXT;
-  const requiresImageUpload = (type: ContentType) => [ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.IMG_TO_TEXT, ContentType.DOC_ENHANCER].includes(type);
+  const requiresImageUpload = (type: ContentType) => [ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.IMG_TO_TEXT, ContentType.DOC_ENHANCER, ContentType.PHOTO_ENHANCER].includes(type);
   const allowMultipleImages = activeTab === ContentType.PASSPORT && ppDress === PassportDress.COUPLE;
   const maxImages = allowMultipleImages ? 3 : 1;
   const supportsOverlayText = (type: ContentType) => [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.VISITING_CARD, ContentType.BANNER, ContentType.INVITATION].includes(type);
@@ -361,6 +365,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.THUMBNAIL: categories = ThumbnailCategory; currentValue = thumbnailCategory; setter = setThumbnailCategory; break;
       case ContentType.LOGO: categories = LogoCategory; currentValue = logoCategory; setter = setLogoCategory; break;
       case ContentType.BG_REMOVE: categories = BgRemoveCategory; currentValue = bgRemoveCategory; setter = setBgRemoveCategory; break;
+      case ContentType.PHOTO_ENHANCER: categories = PhotoEnhancerCategory; currentValue = photoEnhancerCategory; setter = setPhotoEnhancerCategory; break;
       case ContentType.DOC_ENHANCER: categories = DocEnhancerCategory; currentValue = docEnhancerCategory; setter = setDocEnhancerCategory; break;
       case ContentType.LEGAL: categories = LegalCategory; currentValue = legalCategory; setter = setLegalCategory; break;
       case ContentType.APPLICATION: categories = ApplicationCategory; currentValue = applicationCategory; setter = setApplicationCategory; break;
@@ -439,6 +444,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
        if (allowMultipleImages) return `আপনার ছবি আপলোড করুন (${selectedImages.length}/${maxImages})`;
        if (activeTab === ContentType.IMG_TO_TEXT) return "ডকুমেন্ট / ইমেজের ছবি আপলোড করুন";
        if (activeTab === ContentType.DOC_ENHANCER) return "ঘোলা বা কালো ডকুমেন্টের ছবি দিন";
+       if (activeTab === ContentType.PHOTO_ENHANCER) return "ঘোলা বা পুরনো ছবি আপলোড করুন";
        return "আপনার ছবি আপলোড করুন";
     }
     if (activeTab === ContentType.COMMENT) return "স্ক্রিনশট আপলোড করুন (অপশনাল)";
@@ -491,6 +497,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           <TabButton type={ContentType.THUMBNAIL} icon={Crop} label="থাম্বনেইল" />
           <TabButton type={ContentType.IMAGE} icon={ImageIcon} label="এআই ইমেজ" />
           <TabButton type={ContentType.BG_REMOVE} icon={Eraser} label="ব্যাকগ্রাউন্ড" />
+          <TabButton type={ContentType.PHOTO_ENHANCER} icon={Wand} label="ফটো এনহ্যান্সার" />
           <div className="w-px h-6 bg-slate-300 mx-2 self-center flex-shrink-0"></div>
           {/* Social */}
           <TabButton type={ContentType.POST} icon={FileText} label="পোস্ট" />
@@ -607,7 +614,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         ) : (
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
-                {activeTab === ContentType.IMG_TO_TEXT ? "নির্দেশনা (অপশনাল)" : activeTab === ContentType.IMAGE || activeTab === ContentType.THUMBNAIL || activeTab === ContentType.LOGO || activeTab === ContentType.VISITING_CARD || activeTab === ContentType.BANNER || activeTab === ContentType.INVITATION ? "ইমেজ প্রম্পট / বিষয়বস্তু / লেখা" : "বিষয়বস্তু / প্রসঙ্গ / তথ্য"}
+                {activeTab === ContentType.IMG_TO_TEXT ? "নির্দেশনা (অপশনাল)" : activeTab === ContentType.IMAGE || activeTab === ContentType.THUMBNAIL || activeTab === ContentType.LOGO || activeTab === ContentType.VISITING_CARD || activeTab === ContentType.BANNER || activeTab === ContentType.INVITATION || activeTab === ContentType.PHOTO_ENHANCER ? "ইমেজ প্রম্পট / বিষয়বস্তু / লেখা" : "বিষয়বস্তু / প্রসঙ্গ / তথ্য"}
               </label>
               <textarea
                 value={context}
@@ -690,7 +697,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
           </div>
         )}
 
-        {isImageTool(activeTab) && (
+        {isImageTool(activeTab) && activeTab !== ContentType.PHOTO_ENHANCER && (
             <div className="space-y-2">
                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1 flex items-center gap-1"><Ratio size={12} /> অ্যাসপেক্ট রেশিও (Aspect Ratio)</label>
                <div className="flex gap-2 flex-wrap">

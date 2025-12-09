@@ -14,6 +14,7 @@ export enum ContentType {
   LOGO = 'লোগো মেকার',
   PASSPORT = 'পাসপোর্ট ফটো',
   BG_REMOVE = 'ব্যাকগ্রাউন্ড এডিটর',
+  PHOTO_ENHANCER = 'ফটো এনহ্যান্সার (AI)',
   PDF_MAKER = 'পিডিএফ মেকার (PDF)',
   IMG_TO_TEXT = 'ইমেজ টু টেক্সট (OCR)',
   DOC_ENHANCER = 'ডকুমেন্ট ফিক্সার (ক্লিয়ার)',
@@ -164,6 +165,14 @@ export enum BgRemoveCategory {
   BLUR = 'ব্লার ব্যাকগ্রাউন্ড',
   SCENERY = 'প্রকৃতির দৃশ্য',
   OFFICE = 'অফিস ব্যাকগ্রাউন্ড'
+}
+
+export enum PhotoEnhancerCategory {
+  UPSCALE = 'রেজোলিউশন বৃদ্ধি (Upscale)',
+  RESTORE = 'পুরানো ছবি রিপেয়ার (Restore)',
+  COLORIZE = 'সাদা-কালো রঙিন করা (Colorize)',
+  FACE_FIX = 'ফেস ক্লিয়ার / ডি-ব্লার (Face Fix)',
+  LOW_LIGHT = 'রাতের ছবি পরিষ্কার (Low Light)'
 }
 
 // Computer Shop Categories
