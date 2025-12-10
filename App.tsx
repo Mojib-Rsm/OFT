@@ -108,20 +108,48 @@ const App: React.FC = () => {
       console.error(err);
       
       let errorMessage = "Something went wrong. Please check your API Key.";
-      const rawMessage = err.message || JSON.stringify(err);
+      let rawMessage = err.message || JSON.stringify(err);
+      
+      // Try to parse JSON error message if it's embedded in the string
+      try {
+        const jsonStart = rawMessage.indexOf('{');
+        const jsonEnd = rawMessage.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          const jsonStr = rawMessage.substring(jsonStart, jsonEnd + 1);
+          const parsedErr = JSON.parse(jsonStr);
+          
+          if (parsedErr.error) {
+             const code = parsedErr.error.code;
+             const msg = parsedErr.error.message;
+             
+             if (code === 429) {
+                const retryMatch = msg.match(/retry in ([0-9.]+)s/);
+                const waitTime = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 15;
+                errorMessage = `⚠️ কোটা শেষ (Quota Exceeded)। অনুগ্রহ করে ${waitTime} সেকেন্ড অপেক্ষা করুন।`;
+                rawMessage = ""; 
+             } else if (code === 403) {
+                errorMessage = "⛔ PERMISSION DENIED (403)";
+                rawMessage = "403_SPECIAL_HANDLING"; // Use a flag for special detailed message below
+             } else if (code === 404) {
+                errorMessage = "⚠️ মডেলটি খুঁজে পাওয়া যায়নি (404)।";
+                rawMessage = "";
+             }
+          }
+        }
+      } catch (e) {
+        // Parsing failed, fall back to string matching
+      }
 
-      if (rawMessage.includes('limit: 0') || rawMessage.includes('free_tier')) {
-          errorMessage = "⚠️ বিলিং সমস্যা (Limit 0): আপনার API Key টি Free Tier হিসেবে ডিটেক্ট হচ্ছে যার ইমেজ জেনারেশন ক্ষমতা নেই।";
+      if (rawMessage === "403_SPECIAL_HANDLING" || rawMessage.includes('permission denied') || rawMessage.includes('403') || rawMessage.includes('PERMISSION_DENIED')) {
+          errorMessage = "⛔ পারমিশন সমস্যা (403)। দয়া করে .env ফাইলে 'VITE_GEMINI_API_KEY' ব্যবহার করেছেন কিনা নিশ্চিত করুন। এবং Google Cloud Console এ 'Generative Language API' এনাবল করুন।";
+      } else if (rawMessage.includes('limit: 0') || rawMessage.includes('free_tier')) {
+          errorMessage = "⚠️ বিলিং সমস্যা (Limit 0): এই মডেলটি ব্যবহারের জন্য আপনার প্রজেক্টে বিলিং চালু নেই।";
       } else if (rawMessage.includes('429') || rawMessage.includes('RESOURCE_EXHAUSTED')) {
-         errorMessage = "সার্ভার ব্যস্ত (Quota Exceeded)। দয়া করে কিছুক্ষণ পর চেষ্টা করুন।";
-      } else if (rawMessage.includes('403') || rawMessage.includes('PERMISSION_DENIED')) {
-         errorMessage = "API Key পারমিশন নেই (403)। বিলিং চেক করুন অথবা নতুন Key ব্যবহার করুন।";
+         errorMessage = "⏳ সার্ভার ব্যস্ত (Quota Exceeded)। দয়া করে কিছুক্ষণ পর চেষ্টা করুন।";
       } else if (rawMessage.includes('404')) {
-         errorMessage = "মডেল সার্ভিস সাময়িকভাবে বন্ধ (404)।";
-      } else if (rawMessage.includes('SAFETY')) {
-         errorMessage = "নিরাপত্তা বা পলিসি কারণে কন্টেন্ট তৈরি করা সম্ভব হয়নি।";
-      } else {
-         errorMessage = `ত্রুটি: ${rawMessage.substring(0, 100)}...`;
+         errorMessage = "⚠️ মডেল সার্ভিস সাময়িকভাবে বন্ধ (404)।";
+      } else if (rawMessage.includes('API Key is missing')) {
+         errorMessage = "⚠️ API Key পাওয়া যায়নি। দয়া করে .env ফাইল চেক করুন (VITE_GEMINI_API_KEY)।";
       }
 
       setError(errorMessage);
@@ -144,7 +172,6 @@ const App: React.FC = () => {
   };
 
   const handleToolSelect = (type: ContentType) => {
-    // Special check for Downloader redirect
     if (type === ContentType.FB_DOWNLOADER) {
       setView('downloader');
       return;

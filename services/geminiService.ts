@@ -4,70 +4,38 @@ import { ContentType, PassportConfig, ContentLanguage } from "../types";
 
 // --- HELPERS ---
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 const getEnvVar = (key: string): string => {
+  // Vite / Client-side
   if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
     return (import.meta as any).env[key];
   }
+  // Node / Server-side fallback
   if (typeof process !== 'undefined' && process.env && process.env[key]) {
     return process.env[key];
   }
   return "";
 };
 
-const getApiKeys = (): string[] => {
-  const envKeys = getEnvVar("VITE_GEMINI_API_KEYS") || getEnvVar("VITE_API_KEY") || getEnvVar("GEMINI_API_KEY") || "";
-  return envKeys.split(',').map(k => k.trim()).filter(k => k.length > 0);
+const getApiKey = (): string => {
+  // Strictly prioritize VITE_ prefix for client-side security and visibility
+  const key = getEnvVar("VITE_GEMINI_API_KEY") || getEnvVar("VITE_API_KEY") || getEnvVar("GEMINI_API_KEY") || "";
+  
+  if (!key) {
+    console.warn("API Key is missing! Make sure you have VITE_GEMINI_API_KEY in your .env file.");
+  } else {
+    // Log masked key for debugging assurance (e.g. "AIza...5f8a")
+    console.log(`API Key loaded: ${key.substring(0, 4)}...${key.substring(key.length - 4)}`);
+  }
+  return key;
 };
 
-const API_KEYS = getApiKeys();
-if (API_KEYS.length === 0) {
-  console.error("No API Keys found in environment variables.");
-}
+// --- MODEL CONFIGURATION ---
 
-// --- CORE REQUEST HANDLER WITH ROTATION ---
+// Text Model: gemini-2.5-flash is fast, reliable, and multimodal.
+const TEXT_MODEL = 'gemini-2.5-flash';
 
-async function makeGeminiRequest<T>(
-  action: (ai: GoogleGenAI) => Promise<T>,
-  retries = 1
-): Promise<T> {
-  let lastError: any;
-
-  // Try each key
-  for (const apiKey of API_KEYS) {
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-      return await action(ai);
-    } catch (error: any) {
-      lastError = error;
-      const msg = error.message || '';
-      
-      // If error is 429 (Quota) or 500+ (Server), try next key/retry
-      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('500') || msg.includes('503')) {
-        console.warn(`Key failed (${apiKey.slice(0,5)}...), trying next...`);
-        await delay(1000);
-        continue;
-      }
-      
-      // If 403/404/Safety, often key specific or model specific, try next key just in case
-      console.warn(`Error with key: ${msg}. Switching key.`);
-      continue;
-    }
-  }
-  throw lastError;
-}
-
-// --- MODEL STRATEGIES ---
-
-// Text Generation Strategy: gemini-2.5-flash -> gemini-3-pro-preview
-const TEXT_MODELS = ['gemini-2.5-flash', 'gemini-3-pro-preview'];
-
-// Image Creation Strategy: gemini-2.5-flash-image
-const IMAGE_CREATE_MODELS = ['gemini-2.5-flash-image'];
-
-// Image Editing Strategy: gemini-2.5-flash-image
-const IMAGE_EDIT_MODELS = ['gemini-2.5-flash-image'];
+// Image Model: gemini-2.5-flash-image is the default generation model.
+const IMAGE_MODEL = 'gemini-2.5-flash-image';
 
 
 // --- MAIN FUNCTIONS ---
@@ -84,6 +52,11 @@ export const generateBanglaContent = async (
   language: string = ContentLanguage.BANGLA
 ): Promise<string[]> => {
   
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("API Key is missing. Ensure 'VITE_GEMINI_API_KEY' is set in your .env file.");
+  
+  const ai = new GoogleGenAI({ apiKey });
+
   const targetLanguage = language === ContentLanguage.ENGLISH ? "English" : "Bengali (Bangla script)";
   
   const systemInstruction = `
@@ -151,39 +124,32 @@ export const generateBanglaContent = async (
   
   contents.push({ text: prompt });
 
-  // Fallback Loop for Models
-  let lastError;
-  for (const model of TEXT_MODELS) {
-    try {
-      return await makeGeminiRequest(async (ai) => {
-        console.log(`Generating text with ${model}...`);
-        const response = await ai.models.generateContent({
-          model: model,
-          contents: contents,
-          config: {
-            systemInstruction: systemInstruction,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                options: { type: Type.ARRAY, items: { type: Type.STRING } }
-              }
-            }
+  try {
+    console.log(`Generating text with ${TEXT_MODEL}...`);
+    const response = await ai.models.generateContent({
+      model: TEXT_MODEL,
+      contents: contents,
+      config: {
+        systemInstruction: systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            options: { type: Type.ARRAY, items: { type: Type.STRING } }
           }
-        });
+        }
+      }
+    });
 
-        const jsonText = response.text;
-        if (!jsonText) throw new Error("Empty response");
-        const parsed = JSON.parse(jsonText);
-        return parsed.options || [];
-      });
-    } catch (e: any) {
-      console.warn(`Model ${model} failed: ${e.message}`);
-      lastError = e;
-      await delay(1000); // Backoff before next model
-    }
+    const jsonText = response.text;
+    if (!jsonText) throw new Error("Empty response");
+    const parsed = JSON.parse(jsonText);
+    return parsed.options || [];
+
+  } catch (e: any) {
+    console.error(`Text Gen Failed:`, e);
+    throw e;
   }
-  throw lastError || new Error("Failed to generate text with all available models.");
 };
 
 const getDressDescription = (dressType: string, coupleDress?: string): string => {
@@ -212,13 +178,14 @@ export const generateImage = async (
   overlayText?: string
 ): Promise<string[]> => {
   
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("API Key is missing. Ensure 'VITE_GEMINI_API_KEY' is set in your .env file.");
+
+  const ai = new GoogleGenAI({ apiKey });
+
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
   const isDocEnhancer = type === ContentType.DOC_ENHANCER;
-  const isCreationMode = (!inputImages || inputImages.length === 0);
   
-  // Decide which models to use based on mode
-  const MODEL_STRATEGY = isCreationMode ? IMAGE_CREATE_MODELS : IMAGE_EDIT_MODELS;
-
   const parts: any[] = [];
 
   // Handle Input Images (Editing Mode)
@@ -276,41 +243,30 @@ export const generateImage = async (
       parts.push({ text: prompt });
   }
 
-  let errorLogs = [];
-
-  // Fallback Loop
-  for (const model of MODEL_STRATEGY) {
-    try {
-      return await makeGeminiRequest(async (ai) => {
-        console.log(`Generating image with ${model}...`);
-        
-        const response = await ai.models.generateContent({
-             model: model, 
-             contents: { parts: parts },
-             config: { 
-                imageConfig: { aspectRatio: finalAspectRatio }
-             },
-         });
-         
-         const generatedImages: string[] = [];
-         if (response.candidates?.[0]?.content?.parts) {
-             for (const part of response.candidates[0].content.parts) {
-               if (part.inlineData) {
-                 generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-               }
-             }
+  try {
+    console.log(`Generating image with ${IMAGE_MODEL}...`);
+    const response = await ai.models.generateContent({
+         model: IMAGE_MODEL, 
+         contents: { parts: parts },
+         config: { 
+            imageConfig: { aspectRatio: finalAspectRatio }
+         },
+     });
+     
+     const generatedImages: string[] = [];
+     if (response.candidates?.[0]?.content?.parts) {
+         for (const part of response.candidates[0].content.parts) {
+           if (part.inlineData) {
+             generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+           }
          }
-         
-         if (generatedImages.length > 0) return generatedImages;
-         throw new Error(`${model} returned no images.`);
-      });
+     }
+     
+     if (generatedImages.length > 0) return generatedImages;
+     throw new Error("No image output returned from API.");
 
-    } catch (e: any) {
-       console.warn(`Model ${model} failed:`, e.message);
-       errorLogs.push(`${model}: ${e.message}`);
-       await delay(1000);
-    }
+  } catch (e: any) {
+     console.error(`Image Gen Failed:`, e);
+     throw e; 
   }
-
-  throw new Error(`Image Generation Failed. Details: ${errorLogs.join(' | ')}`);
 };
