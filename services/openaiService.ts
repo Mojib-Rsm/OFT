@@ -1,7 +1,8 @@
 
 import { ContentType, ContentLanguage } from "../types";
 
-const OPENAI_API_KEY = "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";
+// Using process.env.OPENAI_API_KEY which you will set in Vercel Settings -> Environment Variables
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 export const generateOpenAIContent = async (
   type: ContentType,
@@ -13,6 +14,10 @@ export const generateOpenAIContent = async (
   userInstruction?: string,
   language: string = ContentLanguage.BANGLA
 ): Promise<string[]> => {
+  if (!OPENAI_API_KEY) {
+    throw new Error("OpenAI API Key is missing. Please add OPENAI_API_KEY to your Vercel Environment Variables.");
+  }
+
   const targetLanguage = language === ContentLanguage.ENGLISH ? "English" : "Bengali (Bangla script)";
   
   const systemPrompt = `You are a witty, culturally aware social media expert and creative writer.
@@ -63,6 +68,10 @@ export const generateOpenAIImage = async (
   promptText: string,
   aspectRatio: string = "1:1"
 ): Promise<string[]> => {
+  if (!OPENAI_API_KEY) {
+    throw new Error("OpenAI API Key is missing. Please add OPENAI_API_KEY to your Vercel Environment Variables.");
+  }
+
   try {
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",

@@ -207,6 +207,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Added missing cases for switch statements to ensure exhaustiveness and fix narrowing errors
   const getActiveCategoryValue = () => {
     switch (activeTab) {
       case ContentType.POST: return postCategory;
@@ -235,6 +236,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.INVITATION: return invitationCategory;
       case ContentType.FB_VIDEO: return fbVideoCategory;
       case ContentType.OTHER: return otherCategory;
+      case ContentType.FB_DOWNLOADER: return '';
       default: return '';
     }
   };
@@ -383,6 +385,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     onGenerate(activeTab, category, finalContext, tone, length, selectedParty, finalAspectRatio, selectedImages, passportConfig, overlayText, userInstruction, language, ocrMethod, provider);
   };
 
+  // Added missing cases for switch statements to ensure exhaustiveness and fix narrowing errors
   const renderCategoryOptions = () => {
     let categories: any = {};
     let currentValue = '';
@@ -416,6 +419,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.INVITATION: categories = InvitationCategory; currentValue = invitationCategory; setter = setInvitationCategory; break;
       case ContentType.FB_VIDEO: categories = FbVideoCategory; currentValue = fbVideoCategory; setter = setFbVideoCategory; break;
       case ContentType.OTHER: categories = OtherCategory; currentValue = otherCategory; setter = setOtherCategory; break;
+      case ContentType.FB_DOWNLOADER: break;
+      default: break;
     }
 
     return (
@@ -431,6 +436,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     );
   };
 
+  // Added missing cases for switch statements to ensure exhaustiveness and fix narrowing errors
   const getPlaceholder = () => {
     switch (activeTab) {
       case ContentType.POST: return "উদাহরণ: বৃষ্টির দিন, বন্ধুদের সাথে আড্ডা, বর্তমান পরিস্থিতি...";
@@ -439,6 +445,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.INVITATION: return "উদাহরণ: পাত্র-পাত্রীর নাম, তারিখ, স্থান...";
       case ContentType.FB_VIDEO: return "ভিডিওর বিষয়বস্তু বা লিংক দিন...";
       case ContentType.IMG_TO_TEXT: return "অতিরিক্ত নির্দেশনা (যেমন: শুধু হাতে লেখা অংশটুকু নিন)...";
+      case ContentType.FB_DOWNLOADER: return "ভিডিও লিংক দিন...";
       default: return "বিষয়বস্তু / তথ্য লিখুন...";
     }
   };
