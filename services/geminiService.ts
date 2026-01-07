@@ -21,6 +21,10 @@ export const generateBanglaContent = async (
   language: string = ContentLanguage.BANGLA
 ): Promise<string[]> => {
   
+  if (!process.env.API_KEY) {
+    throw new Error("Gemini API Key খুঁজে পাওয়া যায়নি। দয়া করে Vercel-এ 'API_KEY' এনভায়রনমেন্ট ভেরিয়েবলটি সেট করুন।");
+  }
+
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const targetLanguage = language === ContentLanguage.ENGLISH ? "English" : "Bengali (Bangla script)";
@@ -145,6 +149,10 @@ export const generateImage = async (
   overlayText?: string
 ): Promise<string[]> => {
   
+  if (!process.env.API_KEY) {
+    throw new Error("Gemini API Key খুঁজে পাওয়া যায়নি। দয়া করে Vercel-এ 'API_KEY' এনভায়রনমেন্ট ভেরিয়েবলটি সেট করুন।");
+  }
+
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 

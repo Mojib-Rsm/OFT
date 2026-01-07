@@ -99,6 +99,7 @@ const POLITICAL_PARTIES = [
   "বাংলাদেশ আওয়ামী লীগ",
   "বাংলাদেশ জাতীয়তাবাদী দল (BNP)",
   "বাংলাদেশ জাতীয় পার্টি",
+  "বাংলাদেশ জাতীয় পার্টি",
   "বাংলাদেশ জামায়াতে ইসলামী",
   "জাতীয় পার্টি",
   "ইসলামী আন্দোলন বাংলাদেশ",
@@ -393,7 +394,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
 
     if (activeTab === ContentType.PASSPORT) return null;
 
-    switch (activeTab) {
+    // Fix: Cast activeTab to ContentType to resolve TypeScript narrowing overlap error.
+    // This prevents unintentional comparison errors when members like IMG_TO_TEXT are checked.
+    switch (activeTab as ContentType) {
       case ContentType.POST: categories = PostCategory; currentValue = postCategory; setter = setPostCategory; break;
       case ContentType.COMMENT: categories = CommentCategory; currentValue = commentCategory; setter = setCommentCategory; break;
       case ContentType.BIO: categories = BioCategory; currentValue = bioCategory; setter = setBioCategory; break;

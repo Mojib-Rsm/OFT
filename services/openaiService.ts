@@ -15,7 +15,7 @@ export const generateOpenAIContent = async (
   language: string = ContentLanguage.BANGLA
 ): Promise<string[]> => {
   if (!OPENAI_API_KEY) {
-    throw new Error("OpenAI API Key is missing. Please add OPENAI_API_KEY to your Vercel Environment Variables.");
+    throw new Error("OpenAI API Key খুঁজে পাওয়া যায়নি। দয়া করে Vercel-এ 'OPENAI_API_KEY' এনভায়রনমেন্ট ভেরিয়েবলটি সেট করুন।");
   }
 
   const targetLanguage = language === ContentLanguage.ENGLISH ? "English" : "Bengali (Bangla script)";
@@ -69,7 +69,7 @@ export const generateOpenAIImage = async (
   aspectRatio: string = "1:1"
 ): Promise<string[]> => {
   if (!OPENAI_API_KEY) {
-    throw new Error("OpenAI API Key is missing. Please add OPENAI_API_KEY to your Vercel Environment Variables.");
+    throw new Error("OpenAI API Key খুঁজে পাওয়া যায়নি। দয়া করে Vercel-এ 'OPENAI_API_KEY' এনভায়রনমেন্ট ভেরিয়েবলটি সেট করুন।");
   }
 
   try {
