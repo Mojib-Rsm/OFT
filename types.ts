@@ -29,6 +29,16 @@ export enum ContentType {
   OTHER = 'অন্যান্য'
 }
 
+export enum AiProvider {
+  GEMINI = 'Gemini (Google)',
+  CHATGPT = 'ChatGPT (OpenAI)'
+}
+
+export enum OcrMethod {
+  AI = 'AI ইঞ্জিন (Gemini)',
+  PACKAGE = 'প্যাকেজ ইঞ্জিন (Local)'
+}
+
 export enum PostCategory {
   FUNNY = 'মজার / মিম',
   SAD = 'স্যাড / আবেগপূর্ণ',
@@ -94,7 +104,7 @@ export enum EmailCategory {
   RESIGNATION = 'Resignation Letter',
   INVITATION = 'দাওয়াত / আমন্ত্রণ',
   COMPLAINT = 'অভিযোগ (Complaint)',
-  SPONSORSHIP = 'স্পন্সরশিপ রিকোয়েস্ট',
+  SPONSORSHIP = 'স্প্পন্সরশিপ রিকোয়েস্ট',
   FORMAL = 'অফিশিয়াল ইমেইল'
 }
 
@@ -170,12 +180,11 @@ export enum BgRemoveCategory {
 export enum PhotoEnhancerCategory {
   UPSCALE = 'রেজোলিউশন বৃদ্ধি (Upscale)',
   RESTORE = 'পুরানো ছবি রিপেয়ার (Restore)',
-  COLORIZE = 'সাদা-কালো রঙিন করা (Colorize)',
+  COLORIZE = 'সাদা-কাল রঙিন করা (Colorize)',
   FACE_FIX = 'ফেস ক্লিয়ার / ডি-ব্লার (Face Fix)',
   LOW_LIGHT = 'রাতের ছবি পরিষ্কার (Low Light)'
 }
 
-// Computer Shop Categories
 export enum DocEnhancerCategory {
   SCAN_EFFECT = 'স্ক্যান ইফেক্ট (সাদা-কালো)',
   BRIGHTEN = 'ব্রাইট & শার্প (রঙিন)',
@@ -220,7 +229,7 @@ export enum BannerCategory {
   SHOP = 'দোকানের ব্যানার / সাইনবোর্ড',
   ELECTION = 'নির্বাচনী পোস্টার',
   WAZZ = 'ওয়াজ মাহফিল / ইসলামি',
-  COACHING = 'কোচিং / ভর্তি বিজ্ঞপ্তি',
+  COACHING = 'COACHING / ভর্তি বিজ্ঞপ্তি',
   DISCOUNT = 'সেল / অফার'
 }
 
@@ -251,7 +260,6 @@ export enum OtherCategory {
   TEXT_MSG = 'SMS / টেক্সট'
 }
 
-// PASSPORT SPECIFIC ENUMS
 export enum PassportCountry {
   BD = 'বাংলাদেশ (45x35mm)',
   US = 'আমেরিকা (2x2 inch)',
@@ -296,7 +304,7 @@ export enum ContentTone {
   CASUAL = 'সাধারণ / ক্যাজুয়াল',
   PROFESSIONAL = 'প্রফেশনাল / ফরমাল',
   FUNNY = 'মজার / হিউমার',
-  SAD = 'আবেগপূর্ণ / ইমোশনাল',
+  SAD = 'আবেগপূর্ণ / ইমোショナル',
   SARCASTIC = 'সার্কাসম / ব্যঙ্গাত্মক',
   EXCITED = 'উচ্ছ্বসিত / এক্সাইটেড',
   ANGRY = 'রাগান্বিত / সিরিয়াস'
@@ -342,6 +350,8 @@ export interface GenerationRequest {
   overlayText?: string;
   userInstruction?: string;
   language?: string;
+  ocrMethod?: OcrMethod;
+  provider?: AiProvider;
 }
 
 export interface HistoryItem {
@@ -360,4 +370,6 @@ export interface HistoryItem {
   overlayText?: string;
   userInstruction?: string;
   language?: string;
+  ocrMethod?: OcrMethod;
+  provider?: AiProvider;
 }

@@ -1,7 +1,8 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   ContentType, 
+  AiProvider,
+  OcrMethod,
   PostCategory, 
   CommentCategory, 
   BioCategory, 
@@ -79,19 +80,24 @@ import {
   Flag as FlagIcon, 
   Gift, 
   Facebook,
-  Wand
+  Wand,
+  Cpu,
+  Package,
+  Bot,
+  Sparkles
 } from 'lucide-react';
 
 interface InputSectionProps {
   initialTab?: ContentType;
   onBack?: () => void;
-  onGenerate: (type: ContentType, category: string, context: string, tone?: string, length?: string, party?: string, aspectRatio?: string, inputImages?: string[], passportConfig?: any, overlayText?: string, userInstruction?: string, language?: string) => void;
+  onGenerate: (type: ContentType, category: string, context: string, tone?: string, length?: string, party?: string, aspectRatio?: string, inputImages?: string[], passportConfig?: any, overlayText?: string, userInstruction?: string, language?: string, ocrMethod?: OcrMethod, provider?: AiProvider) => void;
   isLoading: boolean;
 }
 
 const POLITICAL_PARTIES = [
   "বাংলাদেশ আওয়ামী লীগ",
   "বাংলাদেশ জাতীয়তাবাদী দল (BNP)",
+  "বাংলাদেশ জাতীয় পার্টি",
   "বাংলাদেশ জামায়াতে ইসলামী",
   "জাতীয় পার্টি",
   "ইসলামী আন্দোলন বাংলাদেশ",
@@ -136,6 +142,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     }
   }, [initialTab]);
 
+  // Provider
+  const [provider, setProvider] = usePersistedState<AiProvider>('oft_ai_provider', AiProvider.GEMINI);
+
   // Categories
   const [postCategory, setPostCategory] = usePersistedState<string>('oft_cat_post', PostCategory.FUNNY);
   const [commentCategory, setCommentCategory] = usePersistedState<string>('oft_cat_comment', CommentCategory.PRAISE);
@@ -155,6 +164,9 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
   const [photoEnhancerCategory, setPhotoEnhancerCategory] = usePersistedState<string>('oft_cat_photo_enhance', PhotoEnhancerCategory.UPSCALE);
   const [otherCategory, setOtherCategory] = usePersistedState<string>('oft_cat_other', OtherCategory.BIRTHDAY);
   
+  // OCR Options
+  const [ocrMethod, setOcrMethod] = usePersistedState<OcrMethod>('oft_ocr_method', OcrMethod.AI);
+
   // New Categories for Computer Shop
   const [docEnhancerCategory, setDocEnhancerCategory] = usePersistedState<string>('oft_cat_doc_enhance', DocEnhancerCategory.SCAN_EFFECT);
   const [legalCategory, setLegalCategory] = usePersistedState<string>('oft_cat_legal', LegalCategory.HOUSE_RENT);
@@ -234,37 +246,50 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
 
   const supportsImageUpload = (type: ContentType) => isImageTool(type) || type === ContentType.COMMENT || type === ContentType.IMG_TO_TEXT;
   const requiresImageUpload = (type: ContentType) => [ContentType.PASSPORT, ContentType.BG_REMOVE, ContentType.IMG_TO_TEXT, ContentType.DOC_ENHANCER, ContentType.PHOTO_ENHANCER].includes(type);
-  const allowMultipleImages = activeTab === ContentType.PASSPORT && ppDress === PassportDress.COUPLE;
-  const maxImages = allowMultipleImages ? 3 : 1;
+  
+  // Updated Multi-image logic
+  const allowMultipleImages = (activeTab === ContentType.PASSPORT && ppDress === PassportDress.COUPLE) || activeTab === ContentType.IMG_TO_TEXT;
+  const maxImages = activeTab === ContentType.IMG_TO_TEXT ? 10 : (allowMultipleImages ? 3 : 1);
+  
   const supportsOverlayText = (type: ContentType) => [ContentType.IMAGE, ContentType.THUMBNAIL, ContentType.VISITING_CARD, ContentType.BANNER, ContentType.INVITATION].includes(type);
   
   // Tools that need specific inputs instead of generic context
   const hasDynamicInputs = [ContentType.CV_BIO, ContentType.LEGAL, ContentType.APPLICATION, ContentType.EMAIL].includes(activeTab);
 
-  const processFile = (file: File) => {
-    if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          if (allowMultipleImages) {
-            setSelectedImages(prev => prev.length >= maxImages ? prev : [...prev, reader.result as string]);
-          } else {
-            setSelectedImages([reader.result]);
+  const processFiles = (files: FileList | null) => {
+    if (!files) return;
+    
+    Array.from(files).forEach(file => {
+      if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            setSelectedImages(prev => {
+              if (allowMultipleImages) {
+                return prev.length >= maxImages ? prev : [...prev, reader.result as string];
+              } else {
+                return [reader.result as string];
+              }
+            });
           }
-        }
-      };
-      reader.readAsDataURL(file);
-    }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) { processFile(file); if (fileInputRef.current) fileInputRef.current.value = ''; }
+    processFiles(e.target.files);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); };
-  const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); const file = e.dataTransfer.files?.[0]; if (file) processFile(file); };
+  const handleDrop = (e: React.DragEvent) => { 
+    e.preventDefault(); 
+    setIsDragging(false); 
+    processFiles(e.dataTransfer.files); 
+  };
 
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
@@ -274,8 +299,22 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         for (let i = 0; i < items.length; i++) {
           if (items[i].type.indexOf('image') !== -1) {
             const file = items[i].getAsFile();
-            if (file) processFile(file);
-            break;
+            if (file) {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                if (typeof reader.result === 'string') {
+                  const data = reader.result;
+                  setSelectedImages(prev => {
+                    if (allowMultipleImages) {
+                      return prev.length >= maxImages ? prev : [...prev, data];
+                    } else {
+                      return [data];
+                    }
+                  });
+                }
+              };
+              reader.readAsDataURL(file);
+            }
           }
         }
       }
@@ -301,7 +340,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     if (activeTab === ContentType.LOGO) finalAspectRatio = ImageAspectRatio.SQUARE;
     if (activeTab === ContentType.PASSPORT) finalAspectRatio = ImageAspectRatio.TALL;
     if (activeTab === ContentType.VISITING_CARD) finalAspectRatio = ImageAspectRatio.LANDSCAPE;
-    if (activeTab === ContentType.BANNER) finalAspectRatio = ImageAspectRatio.WIDE; 
+    if (activeTab === ContentType.WIDE) finalAspectRatio = ImageAspectRatio.WIDE; 
     if (activeTab === ContentType.INVITATION) finalAspectRatio = ImageAspectRatio.PORTRAIT;
 
     const passportConfig = activeTab === ContentType.PASSPORT ? {
@@ -339,7 +378,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         `;
     }
 
-    onGenerate(activeTab, category, finalContext, tone, length, selectedParty, finalAspectRatio, selectedImages, passportConfig, overlayText, userInstruction, language);
+    onGenerate(activeTab, category, finalContext, tone, length, selectedParty, finalAspectRatio, selectedImages, passportConfig, overlayText, userInstruction, language, ocrMethod, provider);
   };
 
   const renderCategoryOptions = () => {
@@ -397,6 +436,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       case ContentType.BANNER: return "উদাহরণ: দোকানের নাম, অফার, স্থান...";
       case ContentType.INVITATION: return "উদাহরণ: পাত্র-পাত্রীর নাম, তারিখ, স্থান...";
       case ContentType.FB_VIDEO: return "ভিডিওর বিষয়বস্তু বা লিংক দিন...";
+      case ContentType.IMG_TO_TEXT: return "অতিরিক্ত নির্দেশনা (যেমন: শুধু হাতে লেখা অংশটুকু নিন)...";
       default: return "বিষয়বস্তু / তথ্য লিখুন...";
     }
   };
@@ -406,12 +446,12 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         return (
            <div className="space-y-3 animate-in fade-in">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                 <input className="input-field" placeholder="আপনার নাম" onChange={e => handleFormChange('cvName', e.target.value)} />
-                 <input className="input-field" placeholder="মোবাইল / ইমেইল" onChange={e => handleFormChange('cvContact', e.target.value)} />
+                 <input className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full" placeholder="আপনার নাম" onChange={e => handleFormChange('cvName', e.target.value)} />
+                 <input className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full" placeholder="মোবাইল / ইমেইল" onChange={e => handleFormChange('cvContact', e.target.value)} />
               </div>
-              <input className="input-field" placeholder="শিক্ষাগত যোগ্যতা (সংক্ষেপে)" onChange={e => handleFormChange('cvEdu', e.target.value)} />
-              <textarea className="input-field h-20" placeholder="অভিজ্ঞতা ও স্কিল (Experience & Skills)" onChange={e => handleFormChange('cvExp', e.target.value)} />
-              <textarea className="input-field h-20" placeholder="পারিবারিক / ব্যক্তিগত তথ্য (বায়োডাটার জন্য)" onChange={e => handleFormChange('cvDetails', e.target.value)} />
+              <input className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full" placeholder="শিক্ষাগত যোগ্যতা (সংক্ষেপে)" onChange={e => handleFormChange('cvEdu', e.target.value)} />
+              <textarea className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full h-20" placeholder="অভিজ্ঞতা ও স্কিল (Experience & Skills)" onChange={e => handleFormChange('cvExp', e.target.value)} />
+              <textarea className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full h-20" placeholder="পারিবারিক / ব্যক্তিগত তথ্য (বায়োডাটার জন্য)" onChange={e => handleFormChange('cvDetails', e.target.value)} />
            </div>
         );
     }
@@ -419,20 +459,20 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         return (
            <div className="space-y-3 animate-in fade-in">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                 <input className="input-field" placeholder="১ম পক্ষ (মালিক/দাতা)" onChange={e => handleFormChange('legal1st', e.target.value)} />
-                 <input className="input-field" placeholder="২য় পক্ষ (ভাড়াটিয়া/গ্রহীতা)" onChange={e => handleFormChange('legal2nd', e.target.value)} />
+                 <input className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full" placeholder="১ম পক্ষ (মালিক/দাতা)" onChange={e => handleFormChange('legal1st', e.target.value)} />
+                 <input className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full" placeholder="২য় পক্ষ (ভাড়াটিয়া/গ্রহীতা)" onChange={e => handleFormChange('legal2nd', e.target.value)} />
               </div>
-              <textarea className="input-field h-20" placeholder="জমি / ফ্লাট / টাকার বিবরণ" onChange={e => handleFormChange('legalDetails', e.target.value)} />
-              <textarea className="input-field h-24" placeholder="শর্তাবলী (ভাড়া, মেয়াদ, জামানত ইত্যাদি)" onChange={e => handleFormChange('legalTerms', e.target.value)} />
+              <textarea className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full h-20" placeholder="জমি / ফ্লাট / টাকার বিবরণ" onChange={e => handleFormChange('legalDetails', e.target.value)} />
+              <textarea className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full h-24" placeholder="শর্তাবলী (ভাড়া, মেয়াদ, জামানত ইত্যাদি)" onChange={e => handleFormChange('legalTerms', e.target.value)} />
            </div>
         );
     }
     if (activeTab === ContentType.APPLICATION || activeTab === ContentType.EMAIL) {
         return (
            <div className="space-y-3 animate-in fade-in">
-              <input className="input-field" placeholder="প্রাপক (বরাবর), যেমন: প্রধান শিক্ষক / ম্যানেজার" onChange={e => handleFormChange('appTo', e.target.value)} />
-              <input className="input-field" placeholder="বিষয় (Subject)" onChange={e => handleFormChange('appSubject', e.target.value)} />
-              <textarea className="input-field h-32" placeholder="মূল বিবরণ (কি কারণে আবেদন করছেন?)" onChange={e => handleFormChange('appDetails', e.target.value)} />
+              <input className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full" placeholder="প্রাপক (বরাবর), যেমন: প্রধান শিক্ষক / ম্যানেজার" onChange={e => handleFormChange('appTo', e.target.value)} />
+              <input className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full" placeholder="বিষয় (Subject)" onChange={e => handleFormChange('appSubject', e.target.value)} />
+              <textarea className="input-field border-slate-200 rounded-xl p-3 bg-slate-50 w-full h-32" placeholder="মূল বিবরণ (কি কারণে আবেদন করছেন?)" onChange={e => handleFormChange('appDetails', e.target.value)} />
            </div>
         );
     }
@@ -441,8 +481,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
 
   const getImageUploadLabel = () => {
     if (requiresImageUpload(activeTab)) {
-       if (allowMultipleImages) return `আপনার ছবি আপলোড করুন (${selectedImages.length}/${maxImages})`;
-       if (activeTab === ContentType.IMG_TO_TEXT) return "ডকুমেন্ট / ইমেজের ছবি আপলোড করুন";
+       if (allowMultipleImages) return `ইমেজ আপলোড করুন (${selectedImages.length}/${maxImages})`;
+       if (activeTab === ContentType.IMG_TO_TEXT) return "ডকুমেন্ট / ইমেজের ছবি আপলোড করুন (মাল্টি-পেজ সাপোর্টেড)";
        if (activeTab === ContentType.DOC_ENHANCER) return "ঘোলা বা কালো ডকুমেন্টের ছবি দিন";
        if (activeTab === ContentType.PHOTO_ENHANCER) return "ঘোলা বা পুরনো ছবি আপলোড করুন";
        return "আপনার ছবি আপলোড করুন";
@@ -511,6 +551,58 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
       </div>
 
       <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
+        {/* AI Provider Selector */}
+        <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+           <label className="text-xs font-bold text-indigo-600 uppercase tracking-wider font-bangla ml-1 flex items-center gap-2">
+             <Bot size={14} /> AI ইঞ্জিন সিলেক্ট করুন
+           </label>
+           <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setProvider(AiProvider.GEMINI)}
+                className={`flex items-center justify-center gap-2 p-3 rounded-xl border font-bangla text-sm transition-all ${provider === AiProvider.GEMINI ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-600 border-slate-200 hover:bg-indigo-50 hover:border-indigo-200'}`}
+              >
+                 <Sparkles size={18} /> {AiProvider.GEMINI}
+              </button>
+              <button
+                type="button"
+                onClick={() => setProvider(AiProvider.CHATGPT)}
+                className={`flex items-center justify-center gap-2 p-3 rounded-xl border font-bangla text-sm transition-all ${provider === AiProvider.CHATGPT ? 'bg-green-600 text-white border-green-600 shadow-lg' : 'bg-white text-slate-600 border-slate-200 hover:bg-green-50 hover:border-green-200'}`}
+              >
+                 <Bot size={18} /> {AiProvider.CHATGPT}
+              </button>
+           </div>
+        </div>
+
+        {activeTab === ContentType.IMG_TO_TEXT && (
+          <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+             <label className="text-xs font-bold text-indigo-600 uppercase tracking-wider font-bangla ml-1 flex items-center gap-2">
+               <Cpu size={14} /> OCR ইঞ্জিন সিলেক্ট করুন
+             </label>
+             <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setOcrMethod(OcrMethod.AI)}
+                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border font-bangla text-sm transition-all ${ocrMethod === OcrMethod.AI ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-600 border-slate-200 hover:bg-indigo-50 hover:border-indigo-200'}`}
+                >
+                   <Cpu size={18} /> {OcrMethod.AI}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOcrMethod(OcrMethod.PACKAGE)}
+                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border font-bangla text-sm transition-all ${ocrMethod === OcrMethod.PACKAGE ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-600 border-slate-200 hover:bg-indigo-50 hover:border-indigo-200'}`}
+                >
+                   <Package size={18} /> {OcrMethod.PACKAGE}
+                </button>
+             </div>
+             <p className="text-[10px] text-slate-400 font-bangla px-1 italic">
+               {ocrMethod === OcrMethod.AI 
+                 ? "AI ইঞ্জিন অনেক বেশি স্মার্ট এবং হাতের লেখাও বুঝতে পারে, তবে ইন্টারনেট প্রয়োজন।" 
+                 : "প্যাকেজ ইঞ্জিন সরাসরি ব্রাউজারে কাজ করে এবং অনেক পেজ হলে দ্রুত টেক্সট দিতে পারে।"}
+             </p>
+          </div>
+        )}
+
         {activeTab === ContentType.PASSPORT && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
             <div className="space-y-2">
@@ -584,7 +676,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
               <div onClick={() => fileInputRef.current?.click()} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer group ${isDragging ? 'border-indigo-500 bg-indigo-50' : 'border-slate-300 hover:bg-slate-50 hover:border-indigo-400'}`}>
                 <div className="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform"><Upload size={24} /></div>
                 <p className="text-sm font-semibold text-slate-600 font-bangla">ছবি সিলেক্ট করতে ক্লিক করুন, ড্র্যাগ করুন অথবা পেস্ট (Ctrl+V) করুন</p>
-                <p className="text-xs text-slate-400 mt-1">JPG, PNG সাপোর্টেড {allowMultipleImages && `(Max 3 images)`}</p>
+                <p className="text-xs text-slate-400 mt-1">JPG, PNG সাপোর্টেড {allowMultipleImages && `(Max ${maxImages} images)`}</p>
                 <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" multiple={allowMultipleImages} />
               </div>
             ) : (
@@ -614,7 +706,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
         ) : (
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1">
-                {activeTab === ContentType.IMG_TO_TEXT ? "নির্দেশনা (অপশনাল)" : activeTab === ContentType.IMAGE || activeTab === ContentType.THUMBNAIL || activeTab === ContentType.LOGO || activeTab === ContentType.VISITING_CARD || activeTab === ContentType.BANNER || activeTab === ContentType.INVITATION || activeTab === ContentType.PHOTO_ENHANCER ? "ইমেজ প্রম্পট / বিষয়বস্তু / লেখা" : "বিষয়বস্তু / প্রসঙ্গ / তথ্য"}
+                {activeTab === ContentType.IMG_TO_TEXT ? "নির্দেশনা (অপショナル)" : activeTab === ContentType.IMAGE || activeTab === ContentType.THUMBNAIL || activeTab === ContentType.LOGO || activeTab === ContentType.VISITING_CARD || activeTab === ContentType.BANNER || activeTab === ContentType.INVITATION || activeTab === ContentType.PHOTO_ENHANCER ? "ইমেজ প্রম্পট / বিষয়বস্তু / লেখা" : "বিষয়বস্তু / প্রসঙ্গ / তথ্য"}
               </label>
               <textarea
                 value={context}
@@ -641,7 +733,7 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
 
         {activeTab === ContentType.COMMENT && (
            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1 flex items-center gap-1"><PenLine size={12} /> আপনার মন্তব্য / নির্দিষ্ট পয়েন্ট (অপশনাল)</label>
+             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-bangla ml-1 flex items-center gap-1"><PenLine size={12} /> আপনার মন্তব্য / নির্দিষ্ট পয়েন্ট (অপショナル)</label>
              <input
                 type="text"
                 value={userInstruction}

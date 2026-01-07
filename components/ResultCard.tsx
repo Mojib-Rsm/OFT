@@ -10,7 +10,7 @@ interface ResultCardProps {
 
 const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) => {
   const [copied, setCopied] = useState(false);
-  const isImage = content.startsWith('data:image');
+  const isImage = content.startsWith('data:image') || content.startsWith('http');
   const isVideoResult = content.startsWith('{"sd"') || content.startsWith('{"hd"') || content.startsWith('{"error"');
   const [displayContent, setDisplayContent] = useState<string>(content);
   const [videoData, setVideoData] = useState<any>(null);
@@ -55,7 +55,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
         const y = canvas.height - (canvas.height * 0.1); // Position at bottom 10%
         
         const lines = overlayText.split('\n');
-        // Simple word wrap logic could go here, but for now assuming user manages newlines or short text
         
         // Draw Text Stroke (Outline)
         ctx.strokeStyle = 'black';
@@ -100,10 +99,9 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
   };
 
   const handlePdfDownload = () => {
-    // Basic Markdown to HTML conversion for bold and lines
     const formattedHtml = displayContent
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold: **text** -> <strong>text</strong>
-      .replace(/\n/g, '<br/>'); // Newlines
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
+      .replace(/\n/g, '<br/>'); 
 
     const printWindow = window.open('', '_blank');
     if (printWindow) {
@@ -147,15 +145,12 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
         </html>
       `);
       printWindow.document.close();
-      // Optional: Auto print after load
-      // printWindow.onload = () => printWindow.print();
     } else {
       alert('পপ-আপ ব্লক করা আছে। দয়া করে পপ-আপ এলাউ করুন।');
     }
   };
 
   const handleDocDownload = () => {
-    // Create a basic HTML structure that Word can interpret
     const formattedHtml = displayContent
       .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
       .replace(/\n/g, '<br>');
@@ -223,14 +218,12 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
 
   const generatePrintSheet = async (count: number) => {
     const img = new Image();
+    img.crossOrigin = "anonymous";
     img.src = displayContent;
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-
-      // A6 Sheet approx dimensions @ 300 DPI: 1240 x 1748 px
-      // 4x6 Sheet approx dimensions @ 300 DPI: 1200 x 1800 px
       
       const sheetWidth = 1200;
       const sheetHeight = 1800;
@@ -238,12 +231,9 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
       canvas.width = sheetWidth;
       canvas.height = sheetHeight;
       
-      // Fill white background
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, sheetWidth, sheetHeight);
       
-      // Passport Photo Standard (45x35mm) aspect ratio approx 0.77
-      // In pixels for print, approx 413x531 px per photo
       const photoW = 413;
       const photoH = 531;
       const gap = 40;
@@ -251,7 +241,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
       let cols = 2;
       let rows = Math.ceil(count / cols);
       
-      // Center the grid
       const totalGridW = (cols * photoW) + ((cols - 1) * gap);
       const totalGridH = (rows * photoH) + ((rows - 1) * gap);
       const startX = (sheetWidth - totalGridW) / 2;
@@ -265,13 +254,11 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
         
         ctx.drawImage(img, x, y, photoW, photoH);
         
-        // Add cut marks (optional, simplified border)
         ctx.strokeStyle = '#cccccc';
         ctx.lineWidth = 1;
         ctx.strokeRect(x, y, photoW, photoH);
       }
       
-      // Download
       const link = document.createElement('a');
       link.download = `passport-sheet-${count}-copies.png`;
       link.href = canvas.toDataURL('image/png');
@@ -285,7 +272,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
       style={{ animationDelay: `${index * 75}ms` }}
     >
       <div className="flex h-full relative overflow-hidden">
-        {/* Accent Bar */}
         <div className={`w-1.5 absolute left-0 top-0 bottom-0 bg-gradient-to-b ${index % 2 === 0 ? 'from-indigo-500 to-purple-500' : 'from-blue-500 to-cyan-500'}`}></div>
         
         <div className="flex-1 p-5 sm:p-6 pl-7 flex flex-col gap-4">
@@ -313,9 +299,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
                                <Download size={16} /> SD ভিডিও ডাউনলোড
                             </a>
                           )}
-                          {!videoData.hd && !videoData.sd && (
-                             <p className="text-amber-600 text-sm">কোনো ডাউনলোড লিংক পাওয়া যায়নি। ভিডিওটি হয়তো প্রাইভেট।</p>
-                          )}
                        </div>
                     </div>
                   )}
@@ -333,7 +316,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
               </div>
             ) : (
               <div className="prose prose-sm max-w-none text-slate-800 font-bangla leading-relaxed whitespace-pre-wrap">
-                {/* Rudimentary markdown rendering for preview */}
                 {displayContent.split('\n').map((line, i) => (
                   <div key={i} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
                 ))}
@@ -358,7 +340,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
 
                {isImage ? (
                  <>
-                  {/* Print Sheet Options */}
                   <div className="flex items-center space-x-2 bg-indigo-50/50 p-1 rounded-lg border border-indigo-100/50">
                     <button
                       onClick={() => generatePrintSheet(4)}
@@ -389,7 +370,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
                  </>
                ) : !isVideoResult && (
                  <>
-                 {/* Word Download Button */}
                  <button
                     onClick={handleDocDownload}
                     className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 border border-transparent hover:border-blue-200"
@@ -399,7 +379,6 @@ const ResultCard: React.FC<ResultCardProps> = ({ content, index, overlayText }) 
                     <span className="hidden xs:inline">Word</span>
                   </button>
 
-                 {/* PDF Download Button */}
                   <button
                     onClick={handlePdfDownload}
                     className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border border-transparent hover:border-red-200"

@@ -2,41 +2,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ContentType, PassportConfig, ContentLanguage } from "../types";
 
-// --- HELPERS ---
-
-const getEnvVar = (key: string): string => {
-  // Vite / Client-side
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
-    return (import.meta as any).env[key];
-  }
-  // Node / Server-side fallback
-  if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key];
-  }
-  return "";
-};
-
-const getApiKey = (): string => {
-  // Strictly prioritize VITE_ prefix for client-side security and visibility
-  const key = getEnvVar("VITE_GEMINI_API_KEY") || getEnvVar("VITE_API_KEY") || getEnvVar("GEMINI_API_KEY") || "";
-  
-  if (!key) {
-    console.warn("API Key is missing! Make sure you have VITE_GEMINI_API_KEY in your .env file.");
-  } else {
-    // Log masked key for debugging assurance (e.g. "AIza...5f8a")
-    console.log(`API Key loaded: ${key.substring(0, 4)}...${key.substring(key.length - 4)}`);
-  }
-  return key;
-};
-
 // --- MODEL CONFIGURATION ---
-
-// Text Model: gemini-2.5-flash is fast, reliable, and multimodal.
-const TEXT_MODEL = 'gemini-2.5-flash';
-
-// Image Model: gemini-2.5-flash-image is the default generation model.
+// Basic Text Tasks: gemini-3-flash-preview (latest recommendation)
+const TEXT_MODEL = 'gemini-3-flash-preview';
+// General Image Generation: gemini-2.5-flash-image
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
-
 
 // --- MAIN FUNCTIONS ---
 
@@ -52,10 +22,7 @@ export const generateBanglaContent = async (
   language: string = ContentLanguage.BANGLA
 ): Promise<string[]> => {
   
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error("API Key is missing. Ensure 'VITE_GEMINI_API_KEY' is set in your .env file.");
-  
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const targetLanguage = language === ContentLanguage.ENGLISH ? "English" : "Bengali (Bangla script)";
   
@@ -91,6 +58,7 @@ export const generateBanglaContent = async (
       prompt = `
       Act as a highly accurate OCR tool.
       Task: Analyze the attached image(s) and extract ALL visible text.
+      Identify both English and Bengali text if present.
       Return a JSON object with property "options" containing an array with ONE string: the full extracted text.
       `;
   }
@@ -125,10 +93,9 @@ export const generateBanglaContent = async (
   contents.push({ text: prompt });
 
   try {
-    console.log(`Generating text with ${TEXT_MODEL}...`);
     const response = await ai.models.generateContent({
       model: TEXT_MODEL,
-      contents: contents,
+      contents: { parts: contents },
       config: {
         systemInstruction: systemInstruction,
         responseMimeType: "application/json",
@@ -136,13 +103,14 @@ export const generateBanglaContent = async (
           type: Type.OBJECT,
           properties: {
             options: { type: Type.ARRAY, items: { type: Type.STRING } }
-          }
+          },
+          required: ["options"]
         }
       }
     });
 
     const jsonText = response.text;
-    if (!jsonText) throw new Error("Empty response");
+    if (!jsonText) throw new Error("Empty response from AI");
     const parsed = JSON.parse(jsonText);
     return parsed.options || [];
 
@@ -178,10 +146,7 @@ export const generateImage = async (
   overlayText?: string
 ): Promise<string[]> => {
   
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error("API Key is missing. Ensure 'VITE_GEMINI_API_KEY' is set in your .env file.");
-
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
   const isDocEnhancer = type === ContentType.DOC_ENHANCER;
@@ -216,7 +181,7 @@ export const generateImage = async (
       } else if (isDocEnhancer) {
          fullPrompt = `Act as a Document Scanner. Enhance this document: Remove shadows, make background white, sharpen text. Return ONLY the image.`;
       } else if (type === ContentType.PHOTO_ENHANCER) {
-         if (category.includes('Upscale')) fullPrompt = `Act as a High-End Photo Enhancer. Upscale this image to 4K resolution, sharpen details, and reduce noise. Return ONLY the image.`;
+         if (category.includes('Upscale')) fullPrompt = `Act as a High-End Photo Enhancer. Upscale this image to high resolution, sharpen details, and reduce noise. Return ONLY the image.`;
          else if (category.includes('Restore')) fullPrompt = `Act as a Photo Restoration Expert. Restore this old/damaged photo. Fix scratches, tears, and fade. Return ONLY the image.`;
          else if (category.includes('Colorize')) fullPrompt = `Act as a Colorization Expert. Colorize this black and white photo naturally. Return ONLY the image.`;
          else if (category.includes('Face')) fullPrompt = `Act as a Portrait Enhancer. Fix blurry faces, improve skin texture, and sharpen eyes while keeping identity. Return ONLY the image.`;
@@ -244,12 +209,11 @@ export const generateImage = async (
   }
 
   try {
-    console.log(`Generating image with ${IMAGE_MODEL}...`);
     const response = await ai.models.generateContent({
          model: IMAGE_MODEL, 
          contents: { parts: parts },
          config: { 
-            imageConfig: { aspectRatio: finalAspectRatio }
+            imageConfig: { aspectRatio: finalAspectRatio as any }
          },
      });
      

@@ -7,8 +7,10 @@ import HistoryPage from './components/HistoryPage';
 import ToolGrid from './components/ToolGrid';
 import DownloaderPage from './components/DownloaderPage';
 import Toast from './components/Toast';
-import { ContentType, HistoryItem } from './types';
+import { ContentType, HistoryItem, OcrMethod, AiProvider } from './types';
 import { generateBanglaContent, generateImage } from './services/geminiService';
+import { generateOpenAIContent, generateOpenAIImage } from './services/openaiService';
+import { generateOcrLocal } from './services/ocrService';
 import { Sparkles, RefreshCcw } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -48,7 +50,9 @@ const App: React.FC = () => {
     passportConfig?: any,
     overlayText?: string,
     userInstruction?: string,
-    language?: string
+    language?: string,
+    ocrMethod?: OcrMethod,
+    provider: AiProvider = AiProvider.GEMINI
   ) => {
     setIsLoading(true);
     setError(null);
@@ -72,17 +76,39 @@ const App: React.FC = () => {
       ];
 
       if (imageTools.includes(type)) {
-        generatedOptions = await generateImage(type, category, context, aspectRatio, inputImages, passportConfig, overlayText);
+        if (provider === AiProvider.CHATGPT) {
+          // OpenAI Image Gen (DALL-E) - Note: editing features are limited compared to Gemini Image
+          // We route simple image requests to DALL-E, complex ones like Passport remain Gemini for now
+          // as DALL-E is better at generation than specific editing/retouching
+          if (type === ContentType.IMAGE || type === ContentType.LOGO || type === ContentType.THUMBNAIL) {
+             generatedOptions = await generateOpenAIImage(context, aspectRatio);
+          } else {
+             // Fallback to Gemini for complex editing tools even if ChatGPT is selected
+             generatedOptions = await generateImage(type, category, context, aspectRatio, inputImages, passportConfig, overlayText);
+          }
+        } else {
+          generatedOptions = await generateImage(type, category, context, aspectRatio, inputImages, passportConfig, overlayText);
+        }
+      } else if (type === ContentType.IMG_TO_TEXT && ocrMethod === OcrMethod.PACKAGE) {
+        if (!inputImages || inputImages.length === 0) throw new Error("ছবি আপলোড করুন");
+        generatedOptions = await generateOcrLocal(inputImages);
       } else {
-        generatedOptions = await generateBanglaContent(type, category, context, tone, length, party, userInstruction, inputImages, language);
+        // Text Generation
+        if (provider === AiProvider.CHATGPT) {
+          generatedOptions = await generateOpenAIContent(type, category, context, tone, length, party, userInstruction, language);
+        } else {
+          generatedOptions = await generateBanglaContent(type, category, context, tone, length, party, userInstruction, inputImages, language);
+        }
       }
       
       setResults(generatedOptions);
 
-      const isImageResult = imageTools.includes(type);
+      const isImageResult = imageTools.includes(type) || (provider === AiProvider.CHATGPT && (type === ContentType.IMAGE || type === ContentType.LOGO || type === ContentType.THUMBNAIL));
       
       let historyResults = generatedOptions;
-      if (isImageResult) historyResults = ['[Image Generated] - (ইমেজ সেভ করা হয়নি, স্টোরেজ বাঁচানোর জন্য)'];
+      if (isImageResult && !generatedOptions[0].startsWith('http')) {
+          historyResults = ['[Image Generated] - (ইমেজ সেভ করা হয়নি, স্টোরেজ বাঁচানোর জন্য)'];
+      }
 
       const newItem: HistoryItem = {
         id: Date.now().toString(),
@@ -99,59 +125,16 @@ const App: React.FC = () => {
         passportConfig,
         overlayText,
         userInstruction,
-        language
+        language,
+        ocrMethod,
+        provider
       };
       
       setHistory(prev => [newItem, ...prev]);
 
     } catch (err: any) {
       console.error(err);
-      
-      let errorMessage = "Something went wrong. Please check your API Key.";
-      let rawMessage = err.message || JSON.stringify(err);
-      
-      // Try to parse JSON error message if it's embedded in the string
-      try {
-        const jsonStart = rawMessage.indexOf('{');
-        const jsonEnd = rawMessage.lastIndexOf('}');
-        if (jsonStart !== -1 && jsonEnd !== -1) {
-          const jsonStr = rawMessage.substring(jsonStart, jsonEnd + 1);
-          const parsedErr = JSON.parse(jsonStr);
-          
-          if (parsedErr.error) {
-             const code = parsedErr.error.code;
-             const msg = parsedErr.error.message;
-             
-             if (code === 429) {
-                const retryMatch = msg.match(/retry in ([0-9.]+)s/);
-                const waitTime = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 15;
-                errorMessage = `⚠️ কোটা শেষ (Quota Exceeded)। অনুগ্রহ করে ${waitTime} সেকেন্ড অপেক্ষা করুন।`;
-                rawMessage = ""; 
-             } else if (code === 403) {
-                errorMessage = "⛔ PERMISSION DENIED (403)";
-                rawMessage = "403_SPECIAL_HANDLING"; // Use a flag for special detailed message below
-             } else if (code === 404) {
-                errorMessage = "⚠️ মডেলটি খুঁজে পাওয়া যায়নি (404)।";
-                rawMessage = "";
-             }
-          }
-        }
-      } catch (e) {
-        // Parsing failed, fall back to string matching
-      }
-
-      if (rawMessage === "403_SPECIAL_HANDLING" || rawMessage.includes('permission denied') || rawMessage.includes('403') || rawMessage.includes('PERMISSION_DENIED')) {
-          errorMessage = "⛔ পারমিশন সমস্যা (403)। দয়া করে .env ফাইলে 'VITE_GEMINI_API_KEY' ব্যবহার করেছেন কিনা নিশ্চিত করুন। এবং Google Cloud Console এ 'Generative Language API' এনাবল করুন।";
-      } else if (rawMessage.includes('limit: 0') || rawMessage.includes('free_tier')) {
-          errorMessage = "⚠️ বিলিং সমস্যা (Limit 0): এই মডেলটি ব্যবহারের জন্য আপনার প্রজেক্টে বিলিং চালু নেই।";
-      } else if (rawMessage.includes('429') || rawMessage.includes('RESOURCE_EXHAUSTED')) {
-         errorMessage = "⏳ সার্ভার ব্যস্ত (Quota Exceeded)। দয়া করে কিছুক্ষণ পর চেষ্টা করুন।";
-      } else if (rawMessage.includes('404')) {
-         errorMessage = "⚠️ মডেল সার্ভিস সাময়িকভাবে বন্ধ (404)।";
-      } else if (rawMessage.includes('API Key is missing')) {
-         errorMessage = "⚠️ API Key পাওয়া যায়নি। দয়া করে .env ফাইল চেক করুন (VITE_GEMINI_API_KEY)।";
-      }
-
+      let errorMessage = err.message || "Something went wrong.";
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -211,14 +194,14 @@ const App: React.FC = () => {
               <div className="text-center py-6 sm:py-10 animate-in fade-in zoom-in duration-700 slide-in-from-bottom-4">
                 <div className="inline-flex items-center justify-center p-2 bg-indigo-50 rounded-2xl mb-6 ring-1 ring-indigo-100 shadow-sm">
                    <span className="bg-white px-3 py-1 rounded-xl text-xs font-bold text-indigo-600 shadow-sm">NEW</span>
-                   <span className="px-3 text-xs font-medium text-slate-600">এআই গ্রাফিক্স স্টুডিও এখন লাইভ</span>
+                   <span className="px-3 text-xs font-medium text-slate-600">ChatGPT ও Gemini অপশন যোগ করা হয়েছে</span>
                 </div>
                 <h2 className="text-3xl md:text-5xl font-bold text-slate-800 mb-5 tracking-tight leading-tight">
-                  সোশ্যাল মিডিয়া কন্টেন্ট <br className="hidden md:block"/>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">এখন আরও সহজে</span>
+                  সব কাজ হোক <br className="hidden md:block"/>
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">এআই এর ছোঁয়ায়</span>
                 </h2>
                 <p className="text-slate-500 text-base md:text-lg max-w-xl mx-auto leading-relaxed">
-                  আপনার চিন্তা, আমাদের শব্দ। OFT AI এর সাহায্যে নিমিষেই তৈরি করুন সৃজনশীল পোস্ট, ক্যাপশন এবং কমেন্ট সহ অন্যান্য !
+                  অফিশিয়াল আবেদন থেকে শুরু করে পাসপোর্ট ফটো, লোগো ডিজাইন এবং ওআরসি - সবকিছু এখন এক প্ল্যাটফর্মে !
                 </p>
               </div>
             )}
@@ -257,12 +240,6 @@ const App: React.FC = () => {
                         {results.map((content, index) => (
                           <ResultCard key={index} content={content} index={index} overlayText={overlayText} />
                         ))}
-                      </div>
-                      
-                      <div className="bg-indigo-50/50 rounded-xl p-4 text-center border border-indigo-100/50">
-                        <p className="text-slate-500 text-sm font-medium">
-                          ফলাফল পছন্দ হয়নি? উপরের অপশনগুলো পরিবর্তন করে আবার চেষ্টা করুন!
-                        </p>
                       </div>
                     </div>
                   )}

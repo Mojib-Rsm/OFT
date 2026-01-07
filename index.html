@@ -1,10 +1,11 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OFT AI</title>
-    <!-- Tailwind CSS CDN (Keeping this for quick styling without CSS file setup) -->
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -13,6 +14,15 @@
       }
       .font-bangla {
         font-family: 'Hind Siliguri', sans-serif;
+      }
+      .animate-gradient {
+        background-size: 200% 200%;
+        animation: gradient 5s ease infinite;
+      }
+      @keyframes gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
       }
     </style>
   <script type="importmap">
@@ -23,15 +33,15 @@
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
-    "vite": "https://aistudiocdn.com/vite@^7.2.4",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1"
+    "tesseract.js": "https://esm.run/tesseract.js@5.1.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "vite": "https://esm.sh/vite@^7.3.1"
   }
 }
 </script>
 </head>
   <body class="bg-slate-50 text-slate-900 antialiased">
     <div id="root"></div>
-    <!-- This script tag is CRITICAL for Vite to load your app -->
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
