@@ -1,8 +1,10 @@
 
 import { ContentType, ContentLanguage } from "../types";
 
-// Using process.env.OPENAI_API_KEY which you will set in Vercel Settings -> Environment Variables
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+// Helper to get OpenAI key with fallbacks
+const getOpenAiKey = () => {
+  return process.env.OPENAI_API_KEY || (import.meta as any).env?.VITE_OPENAI_API_KEY;
+};
 
 export const generateOpenAIContent = async (
   type: ContentType,
@@ -14,8 +16,9 @@ export const generateOpenAIContent = async (
   userInstruction?: string,
   language: string = ContentLanguage.BANGLA
 ): Promise<string[]> => {
-  if (!OPENAI_API_KEY) {
-    throw new Error("OpenAI API Key খুঁজে পাওয়া যায়নি। দয়া করে Vercel-এ 'OPENAI_API_KEY' এনভায়রনমেন্ট ভেরিয়েবলটি সেট করুন।");
+  const apiKey = getOpenAiKey();
+  if (!apiKey) {
+    throw new Error("OpenAI API Key খুঁজে পাওয়া যায়নি। Vercel-এ Key সেট করার পর অবশ্যই একবার 'Redeploy' করুন।");
   }
 
   const targetLanguage = language === ContentLanguage.ENGLISH ? "English" : "Bengali (Bangla script)";
@@ -38,7 +41,7 @@ Return JSON with property "options".`;
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`
+        "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
@@ -68,8 +71,9 @@ export const generateOpenAIImage = async (
   promptText: string,
   aspectRatio: string = "1:1"
 ): Promise<string[]> => {
-  if (!OPENAI_API_KEY) {
-    throw new Error("OpenAI API Key খুঁজে পাওয়া যায়নি। দয়া করে Vercel-এ 'OPENAI_API_KEY' এনভায়রনমেন্ট ভেরিয়েবলটি সেট করুন।");
+  const apiKey = getOpenAiKey();
+  if (!apiKey) {
+    throw new Error("OpenAI API Key খুঁজে পাওয়া যায়নি। Vercel-এ Key সেট করার পর অবশ্যই একবার 'Redeploy' করুন।");
   }
 
   try {
@@ -77,7 +81,7 @@ export const generateOpenAIImage = async (
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`
+        "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: "dall-e-3",

@@ -2,6 +2,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ContentType, PassportConfig, ContentLanguage } from "../types";
 
+// Helper to get the API Key with fallbacks
+const getGeminiKey = () => {
+  return process.env.API_KEY || (process.env as any).GEMINI_API_KEY || (import.meta as any).env?.VITE_API_KEY;
+};
+
 // --- MODEL CONFIGURATION ---
 const TEXT_MODEL = 'gemini-3-flash-preview';
 const IMAGE_MODEL_FLASH = 'gemini-2.5-flash-image';
@@ -21,11 +26,12 @@ export const generateBanglaContent = async (
   language: string = ContentLanguage.BANGLA
 ): Promise<string[]> => {
   
-  if (!process.env.API_KEY) {
-    throw new Error("Gemini API Key খুঁজে পাওয়া যায়নি। দয়া করে Vercel-এ 'API_KEY' এনভায়রনমেন্ট ভেরিয়েবলটি সেট করুন।");
+  const apiKey = getGeminiKey();
+  if (!apiKey) {
+    throw new Error("Gemini API Key খুঁজে পাওয়া যায়নি। Vercel-এ Key সেট করার পর অবশ্যই একবার 'Redeploy' করুন।");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
 
   const targetLanguage = language === ContentLanguage.ENGLISH ? "English" : "Bengali (Bangla script)";
   
@@ -149,11 +155,12 @@ export const generateImage = async (
   overlayText?: string
 ): Promise<string[]> => {
   
-  if (!process.env.API_KEY) {
-    throw new Error("Gemini API Key খুঁজে পাওয়া যায়নি। দয়া করে Vercel-এ 'API_KEY' এনভায়রনমেন্ট ভেরিয়েবলটি সেট করুন।");
+  const apiKey = getGeminiKey();
+  if (!apiKey) {
+    throw new Error("Gemini API Key খুঁজে পাওয়া যায়নি। Vercel-এ Key সেট করার পর অবশ্যই একবার 'Redeploy' করুন।");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
 
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
   const isDocEnhancer = type === ContentType.DOC_ENHANCER;
@@ -255,7 +262,6 @@ export const generateImage = async (
      }
 
      if (images.length === 0) {
-       // If no image part but there is text, maybe it's an error message from the model
        const textMsg = firstCandidate.content.parts.find(p => p.text)?.text;
        throw new Error(textMsg || "এআই কোনো ইমেজ তৈরি করতে পারেনি। দয়া করে প্রম্পট পরিবর্তন করে চেষ্টা করুন।");
      }
@@ -263,7 +269,6 @@ export const generateImage = async (
      return images;
   } catch (e: any) {
     console.error(`Image Gen Failed:`, e);
-    // Rethrow with a cleaner message if it's a known error
     if (e.message?.includes("Safety")) throw e;
     throw new Error(e.message || "ইমেজ জেনারেশন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।");
   }
