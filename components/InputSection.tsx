@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   ContentType, 
@@ -340,7 +341,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
     if (activeTab === ContentType.LOGO) finalAspectRatio = ImageAspectRatio.SQUARE;
     if (activeTab === ContentType.PASSPORT) finalAspectRatio = ImageAspectRatio.TALL;
     if (activeTab === ContentType.VISITING_CARD) finalAspectRatio = ImageAspectRatio.LANDSCAPE;
-    if (activeTab === ContentType.WIDE) finalAspectRatio = ImageAspectRatio.WIDE; 
+    // Corrected to use ContentType.BANNER as it was likely intended for WIDE aspect ratio.
+    if (activeTab === ContentType.BANNER) finalAspectRatio = ImageAspectRatio.WIDE; 
     if (activeTab === ContentType.INVITATION) finalAspectRatio = ImageAspectRatio.PORTRAIT;
 
     const passportConfig = activeTab === ContentType.PASSPORT ? {
@@ -487,8 +489,8 @@ const InputSection: React.FC<InputSectionProps> = ({ initialTab, onBack, onGener
        if (activeTab === ContentType.PHOTO_ENHANCER) return "ঘোলা বা পুরনো ছবি আপলোড করুন";
        return "আপনার ছবি আপলোড করুন";
     }
-    if (activeTab === ContentType.COMMENT) return "স্ক্রিনশট আপলোড করুন (অপশনাল)";
-    return "রেফারেন্স ছবি আপলোড করুন (অপশনাল)";
+    if (activeTab === ContentType.COMMENT) return "স্ক্রিনশট আপলোড করুন (অপショナル)";
+    return "রেফারেন্স ছবি আপলোড করুন (অপショナル)";
   };
 
   const TabButton = ({ type, icon: Icon, label }: { type: ContentType, icon: any, label: string }) => (

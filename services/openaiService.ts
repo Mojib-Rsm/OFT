@@ -85,6 +85,9 @@ export const generateOpenAIImage = async (
     }
 
     const data = await response.json();
+    if (!data.data || data.data.length === 0) {
+      throw new Error("OpenAI did not return any image data.");
+    }
     return [data.data[0].url];
   } catch (error) {
     console.error("OpenAI Image Gen Failed:", error);

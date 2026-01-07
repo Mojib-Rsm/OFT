@@ -3,10 +3,9 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { ContentType, PassportConfig, ContentLanguage } from "../types";
 
 // --- MODEL CONFIGURATION ---
-// Basic Text Tasks: gemini-3-flash-preview (latest recommendation)
 const TEXT_MODEL = 'gemini-3-flash-preview';
-// General Image Generation: gemini-2.5-flash-image
-const IMAGE_MODEL = 'gemini-2.5-flash-image';
+const IMAGE_MODEL_FLASH = 'gemini-2.5-flash-image';
+const IMAGE_MODEL_PRO = 'gemini-3-pro-image-preview';
 
 // --- MAIN FUNCTIONS ---
 
@@ -151,9 +150,17 @@ export const generateImage = async (
   const finalAspectRatio = passportConfig ? "3:4" : aspectRatio; 
   const isDocEnhancer = type === ContentType.DOC_ENHANCER;
   
+  const isHighQualityTask = [
+    ContentType.PASSPORT, 
+    ContentType.PHOTO_ENHANCER, 
+    ContentType.LOGO, 
+    ContentType.DOC_ENHANCER
+  ].includes(type);
+  
+  const modelToUse = isHighQualityTask ? IMAGE_MODEL_PRO : IMAGE_MODEL_FLASH;
+
   const parts: any[] = [];
 
-  // Handle Input Images (Editing Mode)
   if (inputImages && inputImages.length > 0) {
       inputImages.forEach(img => {
          const mimeTypeMatch = img.match(/^data:(.*?);base64,/);
@@ -165,72 +172,91 @@ export const generateImage = async (
       let fullPrompt = "";
       if (passportConfig) {
          const dressInstruction = passportConfig.dress.includes('আসল') 
-           ? 'Ensure clothing looks neat.' 
-           : `Change outfit to ${getDressDescription(passportConfig.dress, passportConfig.coupleDress)}.`;
+           ? 'Maintain original clothing but enhance for a professional look.' 
+           : `Transform clothing into ${getDressDescription(passportConfig.dress, passportConfig.coupleDress)}.`;
          const bgInstruction = passportConfig.bg.includes('অফিস') 
-           ? 'Change background to a blurred professional office.' 
-           : `Change background to solid ${passportConfig.bg.split(' ')[0]} color.`;
+           ? 'Set background to a blurred high-end office interior.' 
+           : `Set background to a solid clean ${passportConfig.bg.split(' ')[0]} color.`;
 
-         fullPrompt = `GENERATE a professional passport photo.
-         INSTRUCTIONS:
-         1. IDENTITY: Keep faces EXACTLY the same.
+         fullPrompt = `You are a professional passport photo studio expert.
+         Task: Generate a perfect passport-ready photo from the input.
+         1. FACE: Maintain 100% facial identity. Sharpen features slightly.
          2. CLOTHING: ${dressInstruction}
          3. BACKGROUND: ${bgInstruction}
-         4. ALIGNMENT: Center subject.
-         Return ONLY the image.`;
+         4. ALIGNMENT: Ensure subject is perfectly centered and upright.
+         5. STYLE: Studio lighting, clear and official.`;
       } else if (isDocEnhancer) {
-         fullPrompt = `Act as a Document Scanner. Enhance this document: Remove shadows, make background white, sharpen text. Return ONLY the image.`;
+         fullPrompt = `Clean this document image. Remove shadows, background patterns, and creases. Make the background pure white and the text solid black or its original color but sharper. Ensure 100% legibility.`;
       } else if (type === ContentType.PHOTO_ENHANCER) {
-         if (category.includes('Upscale')) fullPrompt = `Act as a High-End Photo Enhancer. Upscale this image to high resolution, sharpen details, and reduce noise. Return ONLY the image.`;
-         else if (category.includes('Restore')) fullPrompt = `Act as a Photo Restoration Expert. Restore this old/damaged photo. Fix scratches, tears, and fade. Return ONLY the image.`;
-         else if (category.includes('Colorize')) fullPrompt = `Act as a Colorization Expert. Colorize this black and white photo naturally. Return ONLY the image.`;
-         else if (category.includes('Face')) fullPrompt = `Act as a Portrait Enhancer. Fix blurry faces, improve skin texture, and sharpen eyes while keeping identity. Return ONLY the image.`;
-         else fullPrompt = `Enhance this photo. Improve lighting, sharpness, and clarity. Return ONLY the image.`;
+         if (category.includes('Upscale')) fullPrompt = `Increase resolution and details. Sharpen blurry areas and remove noise/artifacts.`;
+         else if (category.includes('Restore')) fullPrompt = `Repair this damaged photo. Fix cracks, scratches, and stains. Restore faded colors or clarify B&W details.`;
+         else if (category.includes('Colorize')) fullPrompt = `Add natural, realistic colors to this black and white photo.`;
+         else if (category.includes('Face')) fullPrompt = `Focus on enhancing facial details. Clarify eyes, skin texture, and hair while maintaining true identity.`;
+         else fullPrompt = `General enhancement: improve lighting, contrast, and overall clarity.`;
       } else {
-         fullPrompt = `Edit this image. ${promptText}. Style: ${category}. Return ONLY the image.`;
+         fullPrompt = `${promptText || 'Edit this image'}. Style: ${category}. Enhance overall quality.`;
       }
       parts.push({ text: fullPrompt });
   } else {
-      // Creation Mode
-      let prompt = `Generate a high quality ${category} image. Subject: ${promptText}.`;
-      if (overlayText) prompt += " Do NOT write text on the image.";
+      let prompt = `Generate a high-quality professional ${category} image. Subject: ${promptText || 'Creative artwork'}.`;
       
-      // Specific prompts for design tools
       if (type === ContentType.VISITING_CARD) {
-          prompt = `Design a professional Business Visiting Card. Style: ${category}. Details: ${promptText}. High resolution, clean typography.`;
+          prompt = `Design a high-end professional Business Card. Theme: ${category}. Details to include: ${promptText}. Minimalist, elegant, high-resolution layout.`;
       } else if (type === ContentType.BANNER) {
-          prompt = `Design a vibrant Banner/Poster. Category: ${category}. Context: ${promptText}. Eye-catching, bold colors.`;
+          prompt = `Create a visually striking banner/poster. Theme: ${category}. Content: ${promptText}. Dynamic composition, bold visual appeal.`;
       } else if (type === ContentType.INVITATION) {
-          prompt = `Design an elegant Invitation Card. Occasion: ${category}. Details: ${promptText}. Decorative, festive style.`;
+          prompt = `Design an exquisite invitation card. Occasion: ${category}. Details: ${promptText}. Decorative, high-quality textures.`;
+      } else if (type === ContentType.LOGO) {
+          prompt = `Design a modern, unique logo. Concept: ${category}. Branding details: ${promptText}. Vector style, clean lines, scalable design.`;
       }
 
-      prompt += " \n\nCRITICAL: Return ONLY the generated image.";
       parts.push({ text: prompt });
   }
 
   try {
     const response = await ai.models.generateContent({
-         model: IMAGE_MODEL, 
+         model: modelToUse, 
          contents: { parts: parts },
          config: { 
-            imageConfig: { aspectRatio: finalAspectRatio as any }
+            imageConfig: { 
+              aspectRatio: (finalAspectRatio || "1:1") as any,
+              imageSize: isHighQualityTask ? "1K" : undefined
+            }
          },
      });
-     
-     const generatedImages: string[] = [];
-     if (response.candidates?.[0]?.content?.parts) {
-         for (const part of response.candidates[0].content.parts) {
-           if (part.inlineData) {
-             generatedImages.push(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
-           }
-         }
-     }
-     
-     if (generatedImages.length > 0) return generatedImages;
-     throw new Error("No image output returned from API.");
 
+     if (!response || !response.candidates || response.candidates.length === 0) {
+        throw new Error("No image candidates returned from API.");
+     }
+
+     const firstCandidate = response.candidates[0];
+
+     if (firstCandidate.finishReason === 'SAFETY') {
+        throw new Error("আপনার অনুরোধটি এআই সেফটি ফিল্টারের কারণে বাতিল করা হয়েছে। দয়া করে ভিন্নভাবে চেষ্টা করুন।");
+     }
+
+     if (!firstCandidate.content || !firstCandidate.content.parts) {
+        throw new Error("API returned an empty content structure.");
+     }
+
+     const images: string[] = [];
+     for (const part of firstCandidate.content.parts) {
+       if (part.inlineData) {
+         images.push(`data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`);
+       }
+     }
+
+     if (images.length === 0) {
+       // If no image part but there is text, maybe it's an error message from the model
+       const textMsg = firstCandidate.content.parts.find(p => p.text)?.text;
+       throw new Error(textMsg || "এআই কোনো ইমেজ তৈরি করতে পারেনি। দয়া করে প্রম্পট পরিবর্তন করে চেষ্টা করুন।");
+     }
+
+     return images;
   } catch (e: any) {
-     console.error(`Image Gen Failed:`, e);
-     throw e; 
+    console.error(`Image Gen Failed:`, e);
+    // Rethrow with a cleaner message if it's a known error
+    if (e.message?.includes("Safety")) throw e;
+    throw new Error(e.message || "ইমেজ জেনারেশন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।");
   }
 };
